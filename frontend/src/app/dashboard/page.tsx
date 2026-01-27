@@ -41,7 +41,6 @@ export default function DashboardPage() {
   const router = useRouter();
   const { user, isAuthenticated, _hasHydrated, logout } = useAuthStore();
 
-  // Debug: log user data
   console.log('[Dashboard] User:', user);
   console.log('[Dashboard] StoreId:', user?.currentStoreId);
 
@@ -71,7 +70,6 @@ export default function DashboardPage() {
 
   const formatShortDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    // Use UTC to prevent timezone shifts
     const day = date.getUTCDate().toString().padStart(2, '0');
     const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
     return `${day}/${month}`;
@@ -108,7 +106,6 @@ export default function DashboardPage() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Dashboard');
 
-    // Add top products sheet
     if (data.topProducts && data.topProducts.length > 0) {
       const productsData = data.topProducts.map((p: any, i: number) => ({
         '#': i + 1,
@@ -129,7 +126,6 @@ export default function DashboardPage() {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.width;
 
-    // Header
     doc.setFontSize(20);
     doc.setFont('helvetica', 'bold');
     doc.text('DASHBOARD DE VENTAS', pageWidth / 2, 20, { align: 'center' });
@@ -140,7 +136,6 @@ export default function DashboardPage() {
     const dateStr = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
     doc.text(`Generado: ${dateStr}`, pageWidth / 2, 28, { align: 'center' });
 
-    // Summary Stats
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     doc.text('Resumen Ejecutivo', 14, 40);
@@ -161,7 +156,6 @@ export default function DashboardPage() {
       headStyles: { fillColor: [59, 130, 246] }
     });
 
-    // Top Products
     if (data.topProducts && data.topProducts.length > 0) {
       doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
