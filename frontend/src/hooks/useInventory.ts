@@ -6,8 +6,10 @@ export function useProducts(storeId?: string) {
   return useQuery<Product[]>({
     queryKey: ['products', storeId],
     queryFn: async () => {
+      // Use inventory endpoint to get products with their stock levels
+      const endpoint = '/api/inventory/products';
       const params = storeId ? { storeId } : {};
-      const response = await apiClient.get('/api/products', { params });
+      const response = await apiClient.get(endpoint, { params });
       return response.data;
     },
   });

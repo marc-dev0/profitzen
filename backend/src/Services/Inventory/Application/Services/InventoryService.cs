@@ -772,18 +772,25 @@ public class InventoryService : IInventoryService
 
         await _context.SaveChangesAsync();
 
-        // Update product purchase prices
-        var detailRequests = purchase.Details.Select(d => new CreatePurchaseDetailRequest
+        // Update product purchase prices with base unit prices
+        var productPricesToUpdate = new List<(Guid ProductId, decimal BasePrice)>();
+        
+        foreach (var detail in purchase.Details)
         {
-            ProductId = d.ProductId,
-            UOMId = d.UOMId,
-            Quantity = d.Quantity,
-            UnitPrice = d.UnitPrice,
-            BonusQuantity = d.BonusQuantity,
-            BonusUOMId = d.BonusUOMId
-        }).ToList();
+            var productInfo = await GetProductFullInfoFromServiceAsync(detail.ProductId, token);
+            if (productInfo != null)
+            {
+                var purchaseUOM = productInfo.PurchaseUOMs?.FirstOrDefault(u => u.UOMId == detail.UOMId);
+                var purchaseConversion = purchaseUOM?.ConversionToBase ?? 1m;
+                var baseUnitPrice = detail.UnitPrice / (purchaseConversion > 0 ? purchaseConversion : 1m);
+                productPricesToUpdate.Add((detail.ProductId, baseUnitPrice));
+            }
+        }
 
-        await UpdateProductPurchasePricesAsync(detailRequests, tenantId);
+        foreach (var priceInfo in productPricesToUpdate)
+        {
+            await UpdateProductPurchasePriceAsync(priceInfo.ProductId, priceInfo.BasePrice, tenantId);
+        }
 
         return await GetPurchaseByIdAsync(purchaseId, tenantId, token)
             ?? throw new InvalidOperationException("Failed to retrieve updated purchase");
@@ -809,38 +816,36 @@ public class InventoryService : IInventoryService
         return lastPrices;
     }
 
-    private async Task UpdateProductPurchasePricesAsync(List<CreatePurchaseDetailRequest> details, string tenantId)
+    private async Task UpdateProductPurchasePriceAsync(Guid productId, decimal basePrice, string tenantId)
     {
         var productServiceUrl = _configuration["Services:ProductService:Url"] ?? "http://localhost:5005";
         var serviceApiKey = _configuration["Services:ApiKey"] ?? "internal-service-key-change-in-production";
 
-        foreach (var detail in details)
+        try
         {
-            try
+            var client = _httpClientFactory.CreateClient();
+            client.DefaultRequestHeaders.Add("X-Service-Key", serviceApiKey);
+            client.DefaultRequestHeaders.Add("X-Tenant-Id", tenantId);
+
+            var requestBody = new
             {
-                var client = _httpClientFactory.CreateClient();
-                client.DefaultRequestHeaders.Add("X-Service-Key", serviceApiKey);
-                client.DefaultRequestHeaders.Add("X-Tenant-Id", tenantId);
+                PurchasePrice = basePrice
+            };
 
-                var requestBody = new
-                {
-                    PurchasePrice = detail.UnitPrice
-                };
+            var response = await client.PatchAsJsonAsync(
+                $"{productServiceUrl}/api/products/{productId}/purchase-price",
+                requestBody
+            );
 
-                var response = await client.PatchAsJsonAsync(
-                    $"{productServiceUrl}/api/products/{detail.ProductId}/purchase-price",
-                    requestBody
-                );
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    Console.WriteLine($"Warning: Failed to update purchase price for product {detail.ProductId}. Status: {response.StatusCode}");
-                }
-            }
-            catch (Exception ex)
+            if (!response.IsSuccessStatusCode)
             {
-                Console.WriteLine($"Warning: Exception updating purchase price for product {detail.ProductId}: {ex.Message}");
+                _logger.LogWarning("Failed to update purchase price for product {ProductId}. Status: {StatusCode}", 
+                    productId, response.StatusCode);
             }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Exception updating purchase price for product {ProductId}", productId);
         }
     }
 

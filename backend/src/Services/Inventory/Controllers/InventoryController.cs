@@ -421,11 +421,11 @@ public class InventoryController : ControllerBase
     }
 
     [HttpGet("products")]
-    public async Task<IActionResult> GetAllProducts()
+    public async Task<IActionResult> GetAllProducts([FromQuery] Guid? storeId)
     {
-        var storeId = GetCurrentStoreId();
+        var targetStoreId = storeId ?? GetCurrentStoreId();
         var token = GetAuthToken();
-        var products = await _inventoryService.GetAllProductsWithStockAsync(storeId, token);
+        var products = await _inventoryService.GetAllProductsWithStockAsync(targetStoreId, token);
         return Ok(products);
     }
 
