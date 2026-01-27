@@ -18,6 +18,7 @@ import { SortableTable } from '@/components/SortableTable';
 import { productSchema, type ProductFormData } from '../../new/validation';
 import apiClient from '@/lib/axios';
 import type { Product } from '@/types/inventory';
+import AppLayout from '@/components/layout/AppLayout';
 
 interface PriceByList {
   priceListId: string;
@@ -631,44 +632,15 @@ export default function EditProductPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <nav className="bg-card shadow-sm border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center space-x-8">
-              <h1 className="text-xl font-bold text-foreground">Profitzen</h1>
-              <div className="hidden md:flex space-x-4">
-                <Link href="/dashboard" className="text-muted-foreground hover:text-foreground px-3 py-2 text-sm font-medium">
-                  Dashboard
-                </Link>
-                <Link href="/products" className="text-primary border-b-2 border-primary px-3 py-2 text-sm font-medium">
-                  Productos
-                </Link>
-                <Link href="/pos" className="text-muted-foreground hover:text-foreground px-3 py-2 text-sm font-medium">
-                  Punto de Venta
-                </Link>
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-muted-foreground">{user?.fullName}</span>
-              <button
-                onClick={logout}
-                className="px-4 py-2 text-sm text-primary-foreground bg-destructive hover:bg-destructive/90 rounded-md"
-              >
-                Cerrar sesión
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      <main className="max-w-5xl mx-auto py-6 sm:px-6 lg:px-8">
+    <AppLayout>
+      <div className="max-w-5xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
           <div className="mb-6">
             <Link href="/products" className="text-primary hover:text-primary/80">
               ← Volver a productos
             </Link>
           </div>
+
 
           <div className="bg-card rounded-lg shadow p-6 border border-border">
             <h2 className="text-2xl font-bold text-foreground mb-6">
@@ -1543,7 +1515,7 @@ export default function EditProductPage() {
             )}
           </div>
         </div>
-      </main>
-    </div>
+      </div>
+    </AppLayout>
   );
 }
