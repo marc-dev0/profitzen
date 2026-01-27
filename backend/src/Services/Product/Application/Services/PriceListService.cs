@@ -24,6 +24,18 @@ public class PriceListService : IPriceListService
             .OrderBy(p => p.Name)
             .ToListAsync();
 
+        if (!priceLists.Any())
+        {
+            _logger.LogInformation("No price lists found for tenant {TenantId}. Creating default price list.", tenantId);
+            
+            var defaultList = new PriceList("Precio Base", "BASE", tenantId, "Lista de precios base", true);
+            
+            _context.PriceLists.Add(defaultList);
+            await _context.SaveChangesAsync();
+            
+            priceLists.Add(defaultList);
+        }
+
         return priceLists.Select(MapToDto);
     }
 
