@@ -66,7 +66,8 @@ services:
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=profitzen;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
       - Services__ApiKey=${SERVICE_KEY}
-      - Services__Product__Url=http://product-service:8080
+      - Services__ProductService__Url=http://product-service:8080
+      - Services__MasterData__Url=http://configuration-service:8080
     depends_on:
       - postgres
     networks:
