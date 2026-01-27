@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -84,7 +84,7 @@ const paymentMethodLabels = {
     Credit: 'Crédito'
 };
 
-export default function SalesPage() {
+function SalesContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const initialSearch = searchParams?.get('q') || '';
@@ -759,5 +759,15 @@ export default function SalesPage() {
 
 
         </AppLayout >
+    );
+}
+
+
+
+export default function SalesPage() {
+    return (
+        <Suspense fallback={<div className="flex items-center justify-center h-screen bg-background text-foreground">Cargando módulo de ventas...</div>}>
+            <SalesContent />
+        </Suspense>
     );
 }
