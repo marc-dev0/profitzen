@@ -1,0 +1,16 @@
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+COPY ["src/Shared/Profitzen.Common/Profitzen.Common.csproj", "src/Shared/Profitzen.Common/"]
+COPY ["src/Services/Configuration/Profitzen.Configuration.csproj", "src/Services/Configuration/"]
+RUN dotnet restore "src/Services/Configuration/Profitzen.Configuration.csproj"
+COPY . .
+WORKDIR "/src/src/Services/Configuration"
+RUN dotnet build "Profitzen.Configuration.csproj" -c Release -o /app/build
+
+FROM build AS publish
+RUN dotnet publish "Profitzen.Configuration.csproj" -c Release -o /app/publish /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
+ENTRYPOINT ["dotnet", "Profitzen.Configuration.dll"]

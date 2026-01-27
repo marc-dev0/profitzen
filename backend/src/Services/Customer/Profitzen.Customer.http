@@ -1,0 +1,6 @@
+@Profitzen.Customer_HostAddress = http://localhost:5233
+
+GET {{Profitzen.Customer_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

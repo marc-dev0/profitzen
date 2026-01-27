@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: profitzen
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: dev_password_123
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_SHARED_PRELOAD_LIBRARIES: pg_stat_statements
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./database/init-schemas.sql:/docker-entrypoint-initdb.d/01-init-schemas.sql
+    networks:
+      - profitzen-network
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    networks:
+      - profitzen-network
+
+
+  identity-service:
+    build:
+      context: ./backend
+      dockerfile: src/Services/Identity/Dockerfile.dev
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=profitzen;Username=identity_user;Password=dev_password_123;Schema=identity
+    volumes:
+      - ./backend/src/Services/Identity:/app/src/Services/Identity
+      - ./backend/src/Shared:/app/src/Shared
+    depends_on:
+      - postgres
+    networks:
+      - profitzen-network
+
+volumes:
+  postgres_dev_data:
+
+networks:
+  profitzen-network:
+    driver: bridge

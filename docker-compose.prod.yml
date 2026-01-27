@@ -1,0 +1,173 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: profitzen
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+      - ./backend/database/init-schemas.sql:/docker-entrypoint-initdb.d/01-init-schemas.sql
+    networks:
+      - profitzen-prod-network
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --appendonly yes
+    volumes:
+      - redis_prod_data:/data
+    networks:
+      - profitzen-prod-network
+
+  identity-service:
+    build:
+      context: ./backend
+      dockerfile: src/Services/Identity/Dockerfile
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=profitzen;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
+      - JwtSettings__SecretKey=${JWT_SECRET}
+      - JwtSettings__Issuer=Profitzen.Identity
+      - JwtSettings__Audience=Profitzen.Api
+      - Services__ApiKey=${SERVICE_KEY}
+    depends_on:
+      - postgres
+    networks:
+      - profitzen-prod-network
+
+  configuration-service:
+    build:
+      context: ./backend
+      dockerfile: src/Services/Configuration/Dockerfile
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=profitzen;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
+      - Services__ApiKey=${SERVICE_KEY}
+    depends_on:
+      - postgres
+    networks:
+      - profitzen-prod-network
+
+  inventory-service:
+    build:
+      context: ./backend
+      dockerfile: src/Services/Inventory/Dockerfile
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=profitzen;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
+      - Services__ApiKey=${SERVICE_KEY}
+      - Services__Product__Url=http://product-service:8080
+    depends_on:
+      - postgres
+    networks:
+      - profitzen-prod-network
+
+  customer-service:
+    build:
+      context: ./backend
+      dockerfile: src/Services/Customer/Dockerfile
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=profitzen;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
+      - Services__ApiKey=${SERVICE_KEY}
+    depends_on:
+      - postgres
+    networks:
+      - profitzen-prod-network
+
+  product-service:
+    build:
+      context: ./backend
+      dockerfile: src/Services/Product/Dockerfile
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=profitzen;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
+      - Services__ApiKey=${SERVICE_KEY}
+    depends_on:
+      - postgres
+    networks:
+      - profitzen-prod-network
+
+  sales-service:
+    build:
+      context: ./backend
+      dockerfile: src/Services/Sales/Dockerfile
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=profitzen;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
+      - Services__Customer__Url=http://customer-service:8080
+      - Services__Inventory__Url=http://inventory-service:8080
+      - Services__ConfigurationUrl=http://configuration-service:8080
+      - Services__ApiKey=${SERVICE_KEY}
+    depends_on:
+      - postgres
+    networks:
+      - profitzen-prod-network
+
+  analytics-service:
+    build:
+      context: ./backend
+      dockerfile: src/Services/Analytics/Dockerfile
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=profitzen;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
+      - Services__ApiKey=${SERVICE_KEY}
+    depends_on:
+      - postgres
+    networks:
+      - profitzen-prod-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      - NEXT_PUBLIC_API_URL=https://${DOMAIN_NAME}/api
+    networks:
+      - profitzen-prod-network
+
+  nginx:
+    image: nginx:alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/certbot/conf:/etc/letsencrypt
+      - ./nginx/certbot/www:/var/www/certbot
+    depends_on:
+      - frontend
+      - identity-service
+      - sales-service
+      - customer-service
+    networks:
+      - profitzen-prod-network
+
+volumes:
+  postgres_prod_data:
+  redis_prod_data:
+
+
+networks:
+  profitzen-prod-network:
+    driver: bridge

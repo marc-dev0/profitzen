@@ -1,0 +1,22 @@
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS development
+
+WORKDIR /app
+
+COPY src/Shared/Profitzen.Common/*.csproj ./src/Shared/Profitzen.Common/
+COPY src/Services/Identity/*.csproj ./src/Services/Identity/
+
+RUN dotnet restore src/Services/Identity/Profitzen.Identity.csproj
+
+COPY src/Shared/Profitzen.Common/ ./src/Shared/Profitzen.Common/
+COPY src/Services/Identity/ ./src/Services/Identity/
+
+WORKDIR /app/src/Services/Identity
+
+ENV ASPNETCORE_ENVIRONMENT=Development
+ENV ASPNETCORE_URLS=http://+:80
+
+RUN dotnet build --no-restore
+
+EXPOSE 80
+
+CMD ["dotnet", "run", "--urls", "http://0.0.0.0:80"]

@@ -1,0 +1,17 @@
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS development
+
+WORKDIR /app
+
+COPY src/ApiGateway/*.csproj ./src/ApiGateway/
+
+RUN dotnet restore src/ApiGateway/Profitzen.ApiGateway.csproj
+
+COPY src/ApiGateway/ ./src/ApiGateway/
+
+WORKDIR /app/src/ApiGateway
+
+RUN dotnet build --no-restore
+
+EXPOSE 80
+
+CMD ["dotnet", "watch", "run", "--urls", "http://0.0.0.0:80"]

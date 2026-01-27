@@ -1,0 +1,142 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: profitzen
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: dev_password_123
+      POSTGRES_SHARED_PRELOAD_LIBRARIES: pg_stat_statements
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./database/init-schemas.sql:/docker-entrypoint-initdb.d/01-init-schemas.sql
+    networks:
+      - profitzen-network
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    networks:
+      - profitzen-network
+
+  api-gateway:
+    build:
+      context: ./backend
+      dockerfile: src/ApiGateway/Dockerfile.dev
+    ports:
+      - "8000:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+    volumes:
+      - ./backend/src/ApiGateway:/app
+      - /app/bin
+      - /app/obj
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - profitzen-network
+
+  identity-service:
+    build:
+      context: ./backend
+      dockerfile: src/Services/Identity/Dockerfile.dev
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=profitzen;Username=identity_user;Password=dev_password_123;Schema=identity
+    volumes:
+      - ./backend/src/Services/Identity:/app
+      - ./backend/src/Shared:/shared
+      - /app/bin
+      - /app/obj
+    depends_on:
+      - postgres
+    networks:
+      - profitzen-network
+
+  inventory-service:
+    build:
+      context: ./backend
+      dockerfile: src/Services/Inventory/Dockerfile.dev
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=profitzen;Username=inventory_user;Password=dev_password_123;Schema=inventory
+      - EventBus__Type=InMemory
+    volumes:
+      - ./backend/src/Services/Inventory:/app
+      - ./backend/src/Shared:/shared
+      - /app/bin
+      - /app/obj
+    depends_on:
+      - postgres
+    networks:
+      - profitzen-network
+
+  sales-service:
+    build:
+      context: ./backend
+      dockerfile: src/Services/Sales/Dockerfile.dev
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=profitzen;Username=sales_user;Password=dev_password_123;Schema=sales
+      - EventBus__Type=InMemory
+      - Services__Inventory__Url=http://inventory-service
+    volumes:
+      - ./backend/src/Services/Sales:/app
+      - ./backend/src/Shared:/shared
+      - /app/bin
+      - /app/obj
+    depends_on:
+      - postgres
+    networks:
+      - profitzen-network
+
+  products-service:
+    build:
+      context: ./backend
+      dockerfile: src/Services/Products/Dockerfile.dev
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=profitzen;Username=products_user;Password=dev_password_123;Schema=products
+    volumes:
+      - ./backend/src/Services/Products:/app
+      - ./backend/src/Shared:/shared
+      - /app/bin
+      - /app/obj
+    depends_on:
+      - postgres
+    networks:
+      - profitzen-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NODE_ENV=development
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    networks:
+      - profitzen-network
+
+volumes:
+  postgres_dev_data:
+
+networks:
+  profitzen-network:
+    driver: bridge

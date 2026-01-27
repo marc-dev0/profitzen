@@ -1,0 +1,6 @@
+@Profitzen.Analytics_HostAddress = http://localhost:5242
+
+GET {{Profitzen.Analytics_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
