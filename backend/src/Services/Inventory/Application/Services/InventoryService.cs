@@ -110,6 +110,20 @@ public class InventoryService : IInventoryService
         string? BaseUOMCode,
         string? BaseUOMName,
         List<ProductPurchaseUOMInfo>? PurchaseUOMs,
+        List<ProductSaleUOMInfo>? SaleUOMs,
+        bool IsActive = true
+    );
+
+    private record InternalProductResponse(
+        Guid Id,
+        string Code,
+        string Name,
+        string? CategoryName,
+        decimal PurchasePrice,
+        decimal SalePrice,
+        bool IsActive,
+        string? Barcode,
+        string? ShortScanCode,
         List<ProductSaleUOMInfo>? SaleUOMs
     );
 
@@ -1003,7 +1017,7 @@ public class InventoryService : IInventoryService
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
-                var products = JsonSerializer.Deserialize<List<ProductSearchDto>>(json, new JsonSerializerOptions
+                var products = JsonSerializer.Deserialize<List<InternalProductResponse>>(json, new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
                 });
@@ -1061,7 +1075,7 @@ public class InventoryService : IInventoryService
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
-                var products = JsonSerializer.Deserialize<List<ProductSearchDto>>(json, new JsonSerializerOptions
+                var products = JsonSerializer.Deserialize<List<InternalProductResponse>>(json, new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
                 });
