@@ -117,7 +117,7 @@ public class Sale : BaseEntity
         Payments.Add(payment);
 
         var totalPaid = Payments.Sum(p => p.Amount);
-        if (totalPaid >= Total)
+        if (Total > 0 && totalPaid >= Total)
         {
             Complete();
         }

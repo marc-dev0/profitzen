@@ -186,19 +186,15 @@ public class SalesService : ISalesService
 
             _logger.LogInformation("Item added to sale. New item count: {ItemCount}", sale.Items.Count);
 
-            // FORCE NEW ITEMS STATE TO ADDED
-            // This prevents DbUpdateConcurrencyException when IDs are pre-assigned
+            // SAFE STATE MANAGEMENT
+            // Only force 'Added' state for items that are truly new to the context
             foreach (var item in sale.Items)
             {
                 var entry = _context.Entry(item);
-                if (entry.State == EntityState.Detached || (item.UpdatedAt == item.CreatedAt && entry.State != EntityState.Deleted))
+                if (entry.State == EntityState.Detached)
                 {
-                    // If it's a new item (or newly added to collection)
-                    if (entry.State != EntityState.Added && entry.State != EntityState.Modified)
-                    {
-                         _logger.LogInformation("Forcing item {ProductId} state to Added", item.ProductId);
-                         entry.State = EntityState.Added;
-                    }
+                    _logger.LogInformation("Marking detached item {ProductId} as Added", item.ProductId);
+                    entry.State = EntityState.Added;
                 }
             }
 
