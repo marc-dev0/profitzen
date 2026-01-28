@@ -845,7 +845,17 @@ export default function EditProductPage() {
                 <div className="space-y-4 mb-4">
                   {purchaseUOMs.length > 0 && (
                     <div className="mb-6">
-                      <p className="text-sm font-medium text-foreground mb-3">¿Cómo quieres definir la equivalencia?</p>
+                      <div className="flex items-center gap-2 mb-3">
+                        <p className="text-sm font-medium text-foreground">¿Cómo quieres definir la equivalencia?</p>
+                        <div className="group relative">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-muted-foreground cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2 bg-popover text-popover-foreground text-xs rounded shadow-lg border border-border opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                            Esto determina cómo se calcula el stock. La opción "Cascada" es más común para cajas y paquetes, mientras que "Directa" es más precisa para productos pesables o líquidos.
+                          </div>
+                        </div>
+                      </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Option 1: Direct to Base */}
                         <div
@@ -864,8 +874,11 @@ export default function EditProductPage() {
                             <div className="flex-1">
                               <div className="flex items-center justify-between">
                                 <h4 className={`font-semibold ${currentPurchaseUOM.conversionRelativeTo === 'base' ? 'text-primary' : 'text-foreground'}`}>
-                                  Directa a la Base
+                                  Directa (Independiente)
                                 </h4>
+                                <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                                  Recomendado para Pesos/Líquidos
+                                </span>
                                 {currentPurchaseUOM.conversionRelativeTo === 'base' && (
                                   <div className="h-4 w-4 rounded-full bg-primary flex items-center justify-center">
                                     <svg className="w-3 h-3 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -875,10 +888,10 @@ export default function EditProductPage() {
                                 )}
                               </div>
                               <p className="text-sm text-muted-foreground mt-1">
-                                Define cuántas unidades base contiene esta nueva presentación.
+                                Cada formato se define por sí solo indicando cuánta base contiene. Evita errores si cambias un tamaño intermedio.
                               </p>
                               <div className="mt-3 text-xs bg-background/50 p-2 rounded border border-border">
-                                <span className="font-medium text-foreground">Ejemplo:</span> 1 {uoms?.find(u => u.id === formData.baseUOMId)?.name || 'Caja'} = X {uoms?.find(u => u.id === formData.baseUOMId)?.name || 'Unidades'}
+                                <span className="font-medium text-foreground italic">Ejemplo:</span> 1 Balde = 20 Litros, 1 Galón = 4 Litros.
                               </div>
                             </div>
                           </div>
@@ -901,8 +914,11 @@ export default function EditProductPage() {
                             <div className="flex-1">
                               <div className="flex items-center justify-between">
                                 <h4 className={`font-semibold ${currentPurchaseUOM.conversionRelativeTo === 'previous' ? 'text-primary' : 'text-foreground'}`}>
-                                  Relativa a la Anterior
+                                  Cascada (Jerarquía)
                                 </h4>
+                                <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                                  Ideal para Cajas/Paquetes
+                                </span>
                                 {currentPurchaseUOM.conversionRelativeTo === 'previous' && (
                                   <div className="h-4 w-4 rounded-full bg-primary flex items-center justify-center">
                                     <svg className="w-3 h-3 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -912,10 +928,10 @@ export default function EditProductPage() {
                                 )}
                               </div>
                               <p className="text-sm text-muted-foreground mt-1">
-                                Define el contenido basándote en la unidad inmediatamente anterior. Ideal para jerarquías (Caja {'->'} Paquete {'->'} Unidad).
+                                Basado en la unidad anterior. Muy rápido de configurar para empaques que van uno dentro de otro.
                               </p>
                               <div className="mt-3 text-xs bg-background/50 p-2 rounded border border-border">
-                                <span className="font-medium text-foreground">Ejemplo:</span> 1 {uoms?.find(u => u.id === purchaseUOMs[purchaseUOMs.length - 1]?.uomId)?.name || 'Caja'} = X {uoms?.find(u => u.id === purchaseUOMs[purchaseUOMs.length - 1]?.uomId)?.name || uoms?.find(u => u.id === formData.baseUOMId)?.name || 'Paquetes'}
+                                <span className="font-medium text-foreground italic">Ejemplo:</span> 1 Caja = 10 Paquetes, 1 Paquete = 6 Unidades.
                               </div>
                             </div>
                           </div>
