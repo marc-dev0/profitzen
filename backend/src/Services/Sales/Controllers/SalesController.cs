@@ -176,14 +176,12 @@ public class SalesController : ControllerBase
         }
     }
 
-    // CancelSale endpoint removed - Cancelled status no longer used
-    /*
     [HttpPost("{id:guid}/cancel")]
     public async Task<IActionResult> CancelSale(Guid id)
     {
         try
         {
-            var sale = await _salesService.CancelSaleAsync(id);
+            var sale = await _salesService.ReturnSaleAsync(id);
             return Ok(sale);
         }
         catch (InvalidOperationException ex)
@@ -191,7 +189,6 @@ public class SalesController : ControllerBase
             return BadRequest(ex.Message);
         }
     }
-    */
 
     [HttpPost("{id:guid}/return")]
     public async Task<IActionResult> ReturnSale(Guid id)

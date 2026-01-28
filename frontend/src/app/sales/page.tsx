@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import axios from 'axios';
+import apiClient from '@/lib/axios';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { useAuthStore } from '@/store/authStore';
@@ -118,7 +118,7 @@ function SalesContent() {
             setLoading(true);
             const token = localStorage.getItem('token');
             const storeId = user?.currentStoreId;
-            const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/sales${storeId ? `?storeId=${storeId}` : ''}`, {
+            const response = await apiClient.get(`/api/sales${storeId ? `?storeId=${storeId}` : ''}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setSales(response.data);
@@ -155,8 +155,8 @@ function SalesContent() {
         try {
             setCancelling(true);
             const token = localStorage.getItem('token');
-            await axios.post(
-                `${process.env.NEXT_PUBLIC_API_URL}/api/sales/${selectedSale.id}/cancel`,
+            await apiClient.post(
+                `/api/sales/${selectedSale.id}/return`,
                 {},
                 { headers: { Authorization: `Bearer ${token}` } }
             );
@@ -179,8 +179,8 @@ function SalesContent() {
         try {
             setReturning(true);
             const token = localStorage.getItem('token');
-            await axios.post(
-                `${process.env.NEXT_PUBLIC_API_URL}/api/sales/${selectedSale.id}/return`,
+            await apiClient.post(
+                `/api/sales/${selectedSale.id}/return`,
                 {},
                 { headers: { Authorization: `Bearer ${token}` } }
             );
@@ -245,8 +245,8 @@ function SalesContent() {
                 CashierName: user?.fullName || 'Usuario'
             };
 
-            const response = await axios.post(
-                `${process.env.NEXT_PUBLIC_API_URL}/api/sales/${sale.id}/ticket`,
+            const response = await apiClient.post(
+                `/api/sales/${sale.id}/ticket`,
                 settings,
                 {
                     headers: { Authorization: `Bearer ${token}` },
@@ -295,7 +295,7 @@ function SalesContent() {
 
         try {
             const token = localStorage.getItem('token');
-            await axios.delete(`${process.env.NEXT_PUBLIC_API_URL}/api/sales/${sale.id}`, {
+            await apiClient.delete(`/api/sales/${sale.id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             toast.success('Venta eliminada correctamente');
