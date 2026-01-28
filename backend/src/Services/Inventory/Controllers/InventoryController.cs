@@ -156,7 +156,7 @@ public class InventoryController : ControllerBase
     }
 
     [HttpPost("store-inventory/{id:guid}/stock/add")]
-    [Authorize(Roles = "Admin,Manager,Logistics")]
+    [Authorize(Policy = "AllowServiceAuth")]
     public async Task<IActionResult> AddStock(Guid id, [FromBody] StockMovementRequest request)
     {
         var tenantId = GetCurrentTenantId();
