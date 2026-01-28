@@ -1032,19 +1032,19 @@ public class SalesService : ISalesService
                     col.Item().AlignRight().Text(text =>
                     {
                         text.Span("Subtotal: ").Bold();
-                        text.Span($"{sale.Subtotal:C2}");
+                        text.Span($"S/ {sale.Subtotal:N2}");
                     });
                     
                     col.Item().AlignRight().Text(text =>
                     {
                         text.Span("IGV: ").Bold();
-                        text.Span($"{sale.TaxAmount:C2}");
+                        text.Span($"S/ {sale.TaxAmount:N2}");
                     });
 
                     col.Item().PaddingTop(5).AlignRight().Text(text =>
                     {
                         text.Span("TOTAL: ").Style(titleStyle);
-                        text.Span($"{sale.Total:C2}").Style(titleStyle);
+                        text.Span($"S/ {sale.Total:N2}").Style(titleStyle);
                     });
 
                     // --- FOOTER ---
