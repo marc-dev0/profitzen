@@ -53,6 +53,7 @@ services:
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=postgres-demo;Database=profitzen_demo;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
       - Services__ApiKey=${SERVICE_KEY}
+      - FileStorage__UploadPath=/var/profitzen/uploads
     depends_on:
       - postgres-demo
     networks:
