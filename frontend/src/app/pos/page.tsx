@@ -16,16 +16,15 @@ const printTicketFromBackend = async (
   saleId: string,
   settings: {
     storeName: string;
-    storeAddress: string; // etc...
-    // I'll make it accepting 'any' or define interface to be quick and safe
+    storeAddress: string;
     [key: string]: any
   }
 ) => {
   try {
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
     const token = localStorage.getItem('token');
 
-    const response = await fetch(`${API_URL}/api/sales/${saleId}/ticket`, {
+    // Usar ruta relativa para que coincida con el origen del sitio (Nginx se encarga del resto)
+    const response = await fetch(`/api/sales/${saleId}/ticket`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
