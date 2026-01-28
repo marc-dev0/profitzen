@@ -97,20 +97,25 @@ public class InventoryService : IInventoryService
         return null;
     }
 
-    private record ProductInfo(string Code, string Name, string? CategoryName, decimal PurchasePrice = 0, string? Barcode = null, string? ShortScanCode = null);
+    private record ProductInfo(string Code, string Name, string? CategoryName, decimal PurchasePrice = 0, string? Barcode = null, string? ShortScanCode = null, List<ProductPurchaseUOMInfo>? PurchaseUOMs = null, List<ProductSaleUOMInfo>? SaleUOMs = null);
 
     private record ProductFullInfo(
         Guid Id,
         string Code,
         string Name,
+        string? CategoryName,
+        decimal PurchasePrice,
+        decimal SalePrice,
         Guid BaseUOMId,
-        List<ProductPurchaseUOMInfo> PurchaseUOMs
+        string? BaseUOMCode,
+        string? BaseUOMName,
+        List<ProductPurchaseUOMInfo>? PurchaseUOMs,
+        List<ProductSaleUOMInfo>? SaleUOMs
     );
 
-    private record ProductPurchaseUOMInfo(
-        Guid UOMId,
-        decimal ConversionToBase
-    );
+    private record ProductPurchaseUOMInfo(Guid UOMId, string? UOMCode, string? UOMName, decimal ConversionToBase, bool IsDefault);
+    private record ProductSaleUOMInfo(Guid UOMId, string? UOMCode, string? UOMName, decimal ConversionToBase, bool IsDefault, decimal Price, List<ProductPriceInfo>? Prices = null);
+    private record ProductPriceInfo(Guid PriceListId, string PriceListCode, string PriceListName, decimal Price);
 
     private async Task<(string Code, string Name)?> GetUOMDetailsAsync(Guid uomId, string tenantId)
     {
@@ -1022,7 +1027,10 @@ public class InventoryService : IInventoryService
                             p.SalePrice,
                             inventory?.CurrentStock ?? 0,
                             p.IsActive,
-                            inventory?.MinimumStock ?? 10
+                            inventory?.MinimumStock ?? 10,
+                            p.Barcode,
+                            p.ShortScanCode,
+                            p.SaleUOMs
                         );
                     }).ToList();
                 }
@@ -1077,7 +1085,10 @@ public class InventoryService : IInventoryService
                             p.SalePrice,
                             inventory?.CurrentStock ?? 0,
                             p.IsActive,
-                            inventory?.MinimumStock ?? 10
+                            inventory?.MinimumStock ?? 10,
+                            p.Barcode,
+                            p.ShortScanCode,
+                            p.SaleUOMs
                         );
                     }).ToList();
                 }

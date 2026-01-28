@@ -53,12 +53,32 @@ public record ProductSearchDto(
     Guid Id,
     string Code,
     string Name,
-    string CategoryName,
+    string? CategoryName,
     decimal PurchasePrice,
     decimal SalePrice,
     int CurrentStock,
     bool IsActive,
-    int MinimumStock
+    int MinimumStock,
+    string? Barcode = null,
+    string? ShortScanCode = null,
+    List<ProductSaleUOMDto>? SaleUOMs = null
+);
+
+public record ProductSaleUOMDto(
+    Guid UOMId,
+    string UOMCode,
+    string UOMName,
+    int ConversionToBase,
+    bool IsDefault,
+    decimal Price,
+    List<ProductPriceDto>? Prices = null
+);
+
+public record ProductPriceDto(
+    Guid PriceListId,
+    string PriceListCode,
+    string PriceListName,
+    decimal Price
 );
 
 public record CreatePurchaseDetailRequest
