@@ -1,0 +1,173 @@
+version: '3.8'
+
+services:
+  postgres-demo:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: profitzen_demo
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_demo_data:/var/lib/postgresql/data
+      - ./backend/database/init-schemas.sql:/docker-entrypoint-initdb.d/01-init-schemas.sql
+    networks:
+      - profitzen-demo-network
+
+  redis-demo:
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --appendonly yes
+    volumes:
+      - redis_demo_data:/data
+    networks:
+      - profitzen-demo-network
+
+  identity-service-demo:
+    build:
+      context: ./backend
+      dockerfile: src/Services/Identity/Dockerfile
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Demo
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=postgres-demo;Database=profitzen_demo;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
+      - JwtSettings__SecretKey=${JWT_SECRET}
+      - JwtSettings__Issuer=Profitzen.Identity.Demo
+      - JwtSettings__Audience=Profitzen.Api.Demo
+      - Services__ApiKey=${SERVICE_KEY}
+      - EnvironmentSettings__IsDemo=true
+      - EnvironmentSettings__AutoSeedDemoData=true
+    depends_on:
+      - postgres-demo
+    networks:
+      - profitzen-demo-network
+
+  configuration-service-demo:
+    build:
+      context: ./backend
+      dockerfile: src/Services/Configuration/Dockerfile
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Demo
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=postgres-demo;Database=profitzen_demo;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
+      - Services__ApiKey=${SERVICE_KEY}
+    depends_on:
+      - postgres-demo
+    networks:
+      - profitzen-demo-network
+
+  inventory-service-demo:
+    build:
+      context: ./backend
+      dockerfile: src/Services/Inventory/Dockerfile
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Demo
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=postgres-demo;Database=profitzen_demo;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
+      - Services__ApiKey=${SERVICE_KEY}
+      - Services__ProductService__Url=http://product-service-demo:8080
+      - Services__MasterData__Url=http://configuration-service-demo:8080
+    depends_on:
+      - postgres-demo
+    networks:
+      - profitzen-demo-network
+
+  customer-service-demo:
+    build:
+      context: ./backend
+      dockerfile: src/Services/Customer/Dockerfile
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Demo
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=postgres-demo;Database=profitzen_demo;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
+      - Services__ApiKey=${SERVICE_KEY}
+    depends_on:
+      - postgres-demo
+    networks:
+      - profitzen-demo-network
+
+  product-service-demo:
+    build:
+      context: ./backend
+      dockerfile: src/Services/Product/Dockerfile
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Demo
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=postgres-demo;Database=profitzen_demo;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
+      - Services__ApiKey=${SERVICE_KEY}
+    depends_on:
+      - postgres-demo
+    networks:
+      - profitzen-demo-network
+
+  sales-service-demo:
+    build:
+      context: ./backend
+      dockerfile: src/Services/Sales/Dockerfile
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Demo
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=postgres-demo;Database=profitzen_demo;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
+      - Services__Customer__Url=http://customer-service-demo:8080
+      - Services__Inventory__Url=http://inventory-service-demo:8080
+      - Services__ConfigurationUrl=http://configuration-service-demo:8080
+      - Services__ApiKey=${SERVICE_KEY}
+    depends_on:
+      - postgres-demo
+    networks:
+      - profitzen-demo-network
+
+  analytics-service-demo:
+    build:
+      context: ./backend
+      dockerfile: src/Services/Analytics/Dockerfile
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Demo
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=postgres-demo;Database=profitzen_demo;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
+      - Services__ApiKey=${SERVICE_KEY}
+    depends_on:
+      - postgres-demo
+    networks:
+      - profitzen-demo-network
+
+  frontend-demo:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      - NEXT_PUBLIC_API_URL=http://${DOMAIN_NAME}:8080/api
+    networks:
+      - profitzen-demo-network
+
+  nginx-demo:
+    image: nginx:alpine
+    restart: always
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/demo-conf.d:/etc/nginx/conf.d
+    depends_on:
+      - frontend-demo
+      - identity-service-demo
+      - sales-service-demo
+      - customer-service-demo
+    networks:
+      - profitzen-demo-network
+
+volumes:
+  postgres_demo_data:
+  redis_demo_data:
+
+
+networks:
+  profitzen-demo-network:
+    driver: bridge
