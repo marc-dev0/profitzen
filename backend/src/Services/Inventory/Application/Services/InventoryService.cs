@@ -1044,16 +1044,25 @@ public class InventoryService : IInventoryService
                             inventory?.MinimumStock ?? 10,
                             p.Barcode,
                             p.ShortScanCode,
-                            p.SaleUOMs
+                            p.SaleUOMs?.Select(u => new ProductSaleUOMDto(
+                                u.UOMId, 
+                                u.UOMCode ?? "", 
+                                u.UOMName ?? "", 
+                                (int)u.ConversionToBase, 
+                                u.IsDefault, 
+                                u.Price,
+                                u.Prices?.Select(pr => new ProductPriceDto(pr.PriceListId, pr.PriceListCode, pr.PriceListName, pr.Price)).ToList()
+                            )).ToList()
                         );
                     }).ToList();
                 }
 
-                return products ?? [];
+                return [];
             }
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Error in SearchProductsAsync");
         }
 
         return [];
@@ -1102,16 +1111,25 @@ public class InventoryService : IInventoryService
                             inventory?.MinimumStock ?? 10,
                             p.Barcode,
                             p.ShortScanCode,
-                            p.SaleUOMs
+                            p.SaleUOMs?.Select(u => new ProductSaleUOMDto(
+                                u.UOMId, 
+                                u.UOMCode ?? "", 
+                                u.UOMName ?? "", 
+                                (int)u.ConversionToBase, 
+                                u.IsDefault, 
+                                u.Price,
+                                u.Prices?.Select(pr => new ProductPriceDto(pr.PriceListId, pr.PriceListCode, pr.PriceListName, pr.Price)).ToList()
+                            )).ToList()
                         );
                     }).ToList();
                 }
 
-                return products ?? [];
+                return [];
             }
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Error in GetAllProductsWithStockAsync");
         }
 
         return [];
