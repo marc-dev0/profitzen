@@ -56,6 +56,14 @@ export default function InventarioPage() {
     // Renaming fetched inventory to avoid conflict with derived state if necessary, but here we just use it directly
     const currentStoreId = user?.currentStoreId;
 
+    const formatCurrency = (value: number | string, decimals: number = 2) => {
+        const numValue = Number(value);
+        if (numValue > 0 && numValue < 1) {
+            return `S/ ${numValue.toFixed(4)}`;
+        }
+        return `S/ ${numValue.toFixed(decimals)}`;
+    };
+
     const { data: inventory, isLoading: isLoadingInventory } = useStoreInventory(currentStoreId);
     // const { data: lowStockData, isLoading: isLoadingLowStock } = useLowStockProducts(currentStoreId); // Removed unused
     const { data: products, isLoading: isLoadingProducts } = useProducts(); // Fetch all products for the tenant
@@ -68,10 +76,8 @@ export default function InventarioPage() {
         return products.map(product => {
             const existing = inventoryMap.get(product.id);
 
-            // Calculate base unit cost
-            const defaultPurchaseUOM = (product as any).purchaseUOMs?.find((u: any) => u.isDefault) || (product as any).purchaseUOMs?.[0];
-            const conversionFactor = defaultPurchaseUOM?.conversionToBase || 1;
-            const unitCost = ((product as any).purchasePrice || 0) / (conversionFactor > 0 ? conversionFactor : 1);
+            // Use backend-calculated unit cost
+            const unitCost = (product as any).unitCost ?? 0;
 
             if (existing) {
                 return {
@@ -80,7 +86,9 @@ export default function InventarioPage() {
                     shortScanCode: (product as any).shortScanCode || existing.shortScanCode,
                     productName: product.name, // Ensure sync
                     productCode: product.code,
-                    unitCost // Use calculated base unit cost
+                    unitCost, // Use base unit cost
+                    purchasePrice: (product as any).purchasePrice || 0,
+                    purchaseUOMName: (product as any).purchaseUOMName || 'Unidad'
                 };
             }
 
@@ -96,7 +104,9 @@ export default function InventarioPage() {
                 storeId: user?.currentStoreId || '',
                 barcode: (product as any).barcode,
                 shortScanCode: (product as any).shortScanCode,
-                unitCost
+                unitCost,
+                purchasePrice: (product as any).purchasePrice || 0,
+                purchaseUOMName: (product as any).purchaseUOMName || 'Unidad'
             } as StoreInventoryItem;
         });
     }, [inventory, products, user?.currentStoreId]);
@@ -411,7 +421,7 @@ export default function InventarioPage() {
     const getTotalProducts = () => mergedInventory.length || 0;
     const getLowStockCount = () => mergedInventory.filter(i => i.currentStock <= i.minimumStock).length || 0;
     const getOutOfStockCount = () => mergedInventory.filter(i => i.currentStock === 0).length || 0;
-    const getTotalValue = () => mergedInventory.reduce((sum, item) => sum + (item.currentStock * (item.unitCost || 0)), 0);
+    const getTotalValue = () => mergedInventory.reduce((sum, item) => sum + (Number(item.currentStock || 0) * Number(item.unitCost || 0)), 0);
 
     // Stock View Columns
     const stockColumns: Column<StoreInventoryItem>[] = [
@@ -513,9 +523,17 @@ export default function InventarioPage() {
             render: (item) => (
                 <div className="flex flex-col">
                     <span className="text-sm font-medium text-foreground">
-                        S/ {(item.unitCost || 0).toFixed(2)}
+                        {formatCurrency((item as any).purchasePrice || 0)}
                     </span>
                     <span className="text-xs text-muted-foreground">
+                        por {(item as any).purchaseUOMName || 'Unidad'}
+                    </span>
+                    {(item.unitCost || 0) > 0 && (item.unitCost || 0) < ((item as any).purchasePrice || 0) && (
+                        <span className="text-[10px] text-muted-foreground opacity-70">
+                            Base: {formatCurrency(item.unitCost || 0, 4)}
+                        </span>
+                    )}
+                    <span className="text-xs text-muted-foreground mt-1 border-t pt-1">
                         Total: S/ {((item.unitCost || 0) * item.currentStock).toFixed(2)}
                     </span>
                 </div>

@@ -56,6 +56,16 @@ public class DataEnrichmentService : IDataEnrichmentService
             product.BaseUOMName = baseUOM.Value.Name;
         }
 
+        if (product.PurchaseUOMId.HasValue)
+        {
+            var pUom = await _masterDataCache.GetUOMAsync(product.PurchaseUOMId.Value, tenantId);
+            if (pUom != null)
+            {
+                product.PurchaseUOMCode = pUom.Value.Code;
+                product.PurchaseUOMName = pUom.Value.Name;
+            }
+        }
+
         if (product.SaleUOMs != null)
         {
             foreach (var saleUOM in product.SaleUOMs)
@@ -83,6 +93,7 @@ public class DataEnrichmentService : IDataEnrichmentService
         }
 
         // Enrich with inventory stock
+        /*
         var stock = await GetInventoryStockAsync(product.Id, tenantId, storeId);
         if (stock != null)
         {
@@ -94,6 +105,7 @@ public class DataEnrichmentService : IDataEnrichmentService
             product.CurrentStock = 0;
             product.MinimumStock = 0;
         }
+        */
     }
 
     private async Task<(int CurrentStock, int MinimumStock)?> GetInventoryStockAsync(Guid productId, string? tenantId, Guid? storeId)

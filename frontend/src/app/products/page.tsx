@@ -24,48 +24,53 @@ export default function ProductsPage() {
     return null;
   }
 
-  const formatCurrency = (value: number) => {
-    return `S/ ${value.toFixed(2)}`;
+  const formatCurrency = (value: number | string, decimals: number = 2) => {
+    const numValue = Number(value);
+    // Para valores menores a 1 sol, mostramos 4 decimales para que no se vea como 0.00
+    if (numValue > 0 && numValue < 1) {
+      return `S/ ${numValue.toFixed(4)}`;
+    }
+    return `S/ ${numValue.toFixed(decimals)}`;
   };
 
   const enrichedProducts = products?.map(product => {
-    const defaultSaleUOM = product.saleUOMs?.find(uom => uom.isDefault) || product.saleUOMs?.[0];
-
+    // Find default sale UOM
     let defaultPrice = 0;
+    let defaultSaleUOM = null;
 
-    // Logic to find the best display price
-    if (defaultSaleUOM) {
-      // 1. Try to find price for specific public lists (Minorista/Retail)
-      const retailPrice = defaultSaleUOM.prices?.find(p =>
-        p.priceListCode === 'MINORISTA' || p.priceListCode === 'RETAIL'
-      );
-
-      if (retailPrice) {
-        defaultPrice = retailPrice.price;
-      }
-      // 2. Fallback to the UOM's main price if set
-      else if (defaultSaleUOM.price && defaultSaleUOM.price > 0) {
+    // 1. Check if there's a default sale UOM
+    if (product.saleUOMs && product.saleUOMs.length > 0) {
+      defaultSaleUOM = product.saleUOMs.find(uom => uom.isDefault);
+      if (defaultSaleUOM) {
         defaultPrice = defaultSaleUOM.price;
-      }
-      // 3. Fallback to the first available price list price
-      else if (defaultSaleUOM.prices && defaultSaleUOM.prices.length > 0) {
-        defaultPrice = defaultSaleUOM.prices[0].price;
       }
     }
 
-    // 4. Last resort: check top-level salePrice
+    // 2. If no default sale UOM, check if there's any sale UOM
+    if (defaultPrice === 0 && product.saleUOMs && product.saleUOMs.length > 0) {
+      defaultSaleUOM = product.saleUOMs[0];
+      defaultPrice = defaultSaleUOM.price;
+    }
+
+    // 3. If still no price, use top-level salePrice
     if (defaultPrice === 0 && product.salePrice > 0) {
       defaultPrice = product.salePrice;
     }
 
-    const defaultPurchaseUOM = product.purchaseUOMs?.find(uom => uom.isDefault) || product.purchaseUOMs?.[0];
-    const conversionFactor = defaultPurchaseUOM?.conversionToBase || 1;
-    const unitCost = (product.purchasePrice || 0) / (conversionFactor > 0 ? conversionFactor : 1);
+    // Use backend-calculated unit cost
+    const unitCost = (product as any).unitCost ?? 0;
+
+    if (product.code === 'PROD-000007') {
+      console.log('[FRONTEND DEBUG] cecece unitCost:', unitCost);
+      console.log('[FRONTEND DEBUG] cecece full product:', product);
+    }
 
     return {
       ...product,
       defaultPrice,
       unitCost,
+      purchasePrice: (product as any).purchasePrice || product.purchasePrice || 0,
+      purchaseUOMName: (product as any).purchaseUOMName || 'Unidad',
       defaultUOMName: defaultSaleUOM?.uomName || defaultSaleUOM?.uomCode || 'UND'
     };
   }) || [];
@@ -73,7 +78,7 @@ export default function ProductsPage() {
   const getTotalProducts = () => enrichedProducts.length;
   const getLowStockCount = () => enrichedProducts.filter(p => (p.currentStock || 0) <= (p.minimumStock || 0)).length;
   const getOutOfStockCount = () => enrichedProducts.filter(p => (p.currentStock || 0) === 0).length;
-  const getTotalValue = () => enrichedProducts.reduce((sum, p) => sum + ((p.currentStock || 0) * p.unitCost), 0);
+  const getTotalValue = () => enrichedProducts.reduce((sum, item) => sum + (Number(item.currentStock || 0) * Number(item.unitCost || 0)), 0);
 
   // Define columns for DataTable
   const productColumns: Column<typeof enrichedProducts[0]>[] = [
@@ -82,9 +87,7 @@ export default function ProductsPage() {
       header: 'Código',
       sortable: true,
       render: (product) => (
-        <span className="font-mono text-sm font-medium text-foreground">
-          {product.code}
-        </span>
+        <span className="font-mono text-sm text-foreground">{product.code}</span>
       )
     },
     {
@@ -93,10 +96,8 @@ export default function ProductsPage() {
       sortable: true,
       render: (product) => (
         <div>
-          <p className="text-sm font-medium text-foreground">{product.name}</p>
-          {product.categoryName && (
-            <p className="text-xs text-muted-foreground">{product.categoryName}</p>
-          )}
+          <p className="font-medium text-foreground">{product.name}</p>
+          <p className="text-xs text-muted-foreground">{product.categoryName}</p>
         </div>
       )
     },
@@ -107,39 +108,48 @@ export default function ProductsPage() {
       render: (product) => {
         const stock = product.currentStock || 0;
         const minStock = product.minimumStock || 0;
-        const isLow = stock <= minStock && stock > 0;
-        const isOut = stock === 0;
+        const isLowStock = stock <= minStock && stock > 0;
+        const isOutOfStock = stock === 0;
 
         return (
           <div className="flex items-center gap-2">
-            <span className={`text-sm font-bold ${isOut ? 'text-destructive' : isLow ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+            <span className={`text-sm font-semibold ${isOutOfStock ? 'text-red-500' :
+              isLowStock ? 'text-yellow-500' :
+                'text-foreground'
+              }`}>
               {stock}
             </span>
-            <span className="text-xs text-muted-foreground">{product.baseUOMName || 'UND'}</span>
-            {isLow && <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />}
-            {isOut && <AlertTriangle className="w-4 h-4 text-destructive" />}
+            <span className="text-xs text-muted-foreground">UND</span>
           </div>
         );
       }
     },
     {
-      key: 'minStock',
+      key: 'minimumStock',
       header: 'Stock Mín.',
       sortable: true,
       render: (product) => (
-        <span className="text-sm text-muted-foreground">
-          {product.minimumStock || 0}
-        </span>
+        <span className="text-sm text-muted-foreground">{product.minimumStock || 0}</span>
       )
     },
     {
       key: 'purchasePrice',
-      header: 'Costo',
+      header: 'Costo Compra',
       sortable: true,
       render: (product) => (
-        <span className="text-sm text-foreground">
-          {formatCurrency(product.purchasePrice || 0)}
-        </span>
+        <div>
+          <p className="text-sm font-medium text-foreground">
+            {formatCurrency(product.purchasePrice)}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            por {product.purchaseUOMName}
+          </p>
+          {product.unitCost > 0 && product.unitCost < product.purchasePrice && (
+            <p className="text-[10px] text-muted-foreground opacity-70">
+              Base: {formatCurrency(product.unitCost, 4)}
+            </p>
+          )}
+        </div>
       )
     },
     {

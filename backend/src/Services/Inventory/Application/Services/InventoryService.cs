@@ -114,23 +114,51 @@ public class InventoryService : IInventoryService
         bool IsActive = true
     );
 
-    private record InternalProductResponse(
-        Guid Id,
-        string Code,
-        string Name,
-        string? CategoryName,
-        decimal PurchasePrice,
-        decimal SalePrice,
-        bool IsActive,
-        string? Barcode,
-        string? ShortScanCode,
-        List<ProductPurchaseUOMInfo>? PurchaseUOMs,
-        List<ProductSaleUOMInfo>? SaleUOMs
-    );
+    private class InternalProductResponse
+    {
+        public Guid Id { get; set; }
+        public string Code { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string? CategoryName { get; set; }
+        public decimal PurchasePrice { get; set; }
+        public decimal SalePrice { get; set; }
+        public bool IsActive { get; set; }
+        public string? Barcode { get; set; }
+        public string? ShortScanCode { get; set; }
+        public decimal? UnitCost { get; set; }
+        public string? PurchaseUOMCode { get; set; }
+        public string? PurchaseUOMName { get; set; }
+        public List<ProductPurchaseUOMInfo>? PurchaseUOMs { get; set; }
+        public List<ProductSaleUOMInfo>? SaleUOMs { get; set; }
+    }
 
-    private record ProductPurchaseUOMInfo(Guid UOMId, string? UOMCode, string? UOMName, decimal ConversionToBase, bool IsDefault);
-    private record ProductSaleUOMInfo(Guid UOMId, string? UOMCode, string? UOMName, decimal ConversionToBase, bool IsDefault, decimal Price, List<ProductPriceInfo>? Prices = null);
-    private record ProductPriceInfo(Guid PriceListId, string PriceListCode, string PriceListName, decimal Price);
+    private class ProductPurchaseUOMInfo 
+    {
+        public Guid UOMId { get; set; }
+        public string? UOMCode { get; set; }
+        public string? UOMName { get; set; }
+        public decimal ConversionToBase { get; set; }
+        public bool IsDefault { get; set; }
+    }
+
+    private class ProductSaleUOMInfo
+    {
+        public Guid UOMId { get; set; }
+        public string? UOMCode { get; set; }
+        public string? UOMName { get; set; }
+        public decimal ConversionToBase { get; set; }
+        public bool IsDefault { get; set; }
+        public decimal Price { get; set; }
+        public List<ProductPriceInfo>? Prices { get; set; }
+    }
+
+    private class ProductPriceInfo
+    {
+        public Guid PriceListId { get; set; }
+        public string? PriceListCode { get; set; }
+        public string? PriceListName { get; set; }
+        public decimal Price { get; set; }
+    }
 
     private async Task<(string Code, string Name)?> GetUOMDetailsAsync(Guid uomId, string tenantId)
     {
@@ -171,13 +199,11 @@ public class InventoryService : IInventoryService
         if (!inventoryItems.Any()) return [];
 
         var productServiceUrl = _configuration["Services:ProductService:Url"] ?? "http://localhost:5005";
-        var client = _httpClientFactory.CreateClient();
-        if (!string.IsNullOrEmpty(token))
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var client = _serviceHttpClient.CreateClient();
 
         try
         {
-            var response = await client.GetAsync($"{productServiceUrl}/api/products?storeId={storeId}");
+            var response = await client.GetAsync($"{productServiceUrl}/api/products?storeId={storeId}&includeStock=false");
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
@@ -192,10 +218,7 @@ public class InventoryService : IInventoryService
                 {
                     productMap.TryGetValue(item.ProductId, out var product);
                     
-                    // Calculate Unit Cost in Base Units
-                    var defaultPurchaseUOM = product?.PurchaseUOMs?.FirstOrDefault(pu => pu.IsDefault);
-                    var conversionFactor = defaultPurchaseUOM?.ConversionToBase ?? 1;
-                    var unitCostInBaseUnits = (product?.PurchasePrice ?? 0) / (conversionFactor > 0 ? conversionFactor : 1);
+
 
                     return new StoreInventoryDto(
                         item.Id,
@@ -210,7 +233,9 @@ public class InventoryService : IInventoryService
                         item.CreatedAt,
                         product?.Barcode,
                         product?.ShortScanCode,
-                        unitCostInBaseUnits
+                        product?.UnitCost ?? 0,
+                        product?.PurchasePrice ?? 0,
+                        product?.PurchaseUOMName
                     );
                 }).ToList();
             }
@@ -236,13 +261,11 @@ public class InventoryService : IInventoryService
         if (!inventoryItems.Any()) return [];
 
         var productServiceUrl = _configuration["Services:ProductService:Url"] ?? "http://localhost:5005";
-        var client = _httpClientFactory.CreateClient();
-        if (!string.IsNullOrEmpty(token))
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var client = _serviceHttpClient.CreateClient();
 
         try
         {
-            var response = await client.GetAsync($"{productServiceUrl}/api/products?storeId={storeId}");
+            var response = await client.GetAsync($"{productServiceUrl}/api/products?storeId={storeId}&includeStock=false");
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
@@ -257,10 +280,7 @@ public class InventoryService : IInventoryService
                 {
                     productMap.TryGetValue(item.ProductId, out var product);
 
-                    // Calculate Unit Cost in Base Units
-                    var defaultPurchaseUOM = product?.PurchaseUOMs?.FirstOrDefault(pu => pu.IsDefault);
-                    var conversionFactor = defaultPurchaseUOM?.ConversionToBase ?? 1;
-                    var unitCostInBaseUnits = (product?.PurchasePrice ?? 0) / (conversionFactor > 0 ? conversionFactor : 1);
+
 
                     return new StoreInventoryDto(
                         item.Id,
@@ -275,7 +295,9 @@ public class InventoryService : IInventoryService
                         item.CreatedAt,
                         product?.Barcode,
                         product?.ShortScanCode,
-                        unitCostInBaseUnits
+                        product?.UnitCost ?? 0,
+                        product?.PurchasePrice ?? 0,
+                        product?.PurchaseUOMName
                     );
                 }).ToList();
             }
@@ -864,10 +886,17 @@ public class InventoryService : IInventoryService
             var productInfo = await GetProductFullInfoFromServiceAsync(detail.ProductId, token);
             if (productInfo != null)
             {
+                var defaultPurchaseUOM = productInfo.PurchaseUOMs?.FirstOrDefault(pu => pu.IsDefault);
+                var defaultConversion = defaultPurchaseUOM?.ConversionToBase ?? 1m;
+
                 var purchaseUOM = productInfo.PurchaseUOMs?.FirstOrDefault(u => u.UOMId == detail.UOMId);
                 var purchaseConversion = purchaseUOM?.ConversionToBase ?? 1m;
-                var baseUnitPrice = detail.UnitPrice / (purchaseConversion > 0 ? purchaseConversion : 1m);
-                productPricesToUpdate.Add((detail.ProductId, baseUnitPrice));
+                
+                // Keep the Product.PurchasePrice as the price of the Default Purchase UOM
+                // Price_DefaultUOM = Price_BoughtUOM * (Conversion_DefaultUOM / Conversion_BoughtUOM)
+                var defaultUOMPrice = detail.UnitPrice * (defaultConversion / (purchaseConversion > 0 ? purchaseConversion : 1m));
+                
+                productPricesToUpdate.Add((detail.ProductId, defaultUOMPrice));
             }
         }
 
@@ -907,9 +936,7 @@ public class InventoryService : IInventoryService
 
         try
         {
-            var client = _httpClientFactory.CreateClient();
-            client.DefaultRequestHeaders.Add("X-Service-Key", serviceApiKey);
-            client.DefaultRequestHeaders.Add("X-Tenant-Id", tenantId);
+            var client = _serviceHttpClient.CreateClient(tenantId: tenantId);
 
             var requestBody = new
             {
@@ -1078,7 +1105,7 @@ public class InventoryService : IInventoryService
 
         try
         {
-            var response = await client.GetAsync($"{productServiceUrl}/api/products/search?term={Uri.EscapeDataString(searchTerm)}");
+            var response = await client.GetAsync($"{productServiceUrl}/api/products/search?term={Uri.EscapeDataString(searchTerm)}&includeStock=false");
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
@@ -1109,6 +1136,8 @@ public class InventoryService : IInventoryService
                             inventory?.MinimumStock ?? 10,
                             p.Barcode,
                             p.ShortScanCode,
+                            p.UnitCost ?? 0,
+                            p.PurchaseUOMName,
                             p.SaleUOMs?.Select(u => new ProductSaleUOMDto(
                                 u.UOMId, 
                                 u.UOMCode ?? "", 
@@ -1145,7 +1174,7 @@ public class InventoryService : IInventoryService
 
         try
         {
-            var response = await client.GetAsync($"{productServiceUrl}/api/products");
+            var response = await client.GetAsync($"{productServiceUrl}/api/products?includeStock=false");
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
@@ -1176,6 +1205,8 @@ public class InventoryService : IInventoryService
                             inventory?.MinimumStock ?? 10,
                             p.Barcode,
                             p.ShortScanCode,
+                            p.UnitCost ?? 0,
+                            p.PurchaseUOMName,
                             p.SaleUOMs?.Select(u => new ProductSaleUOMDto(
                                 u.UOMId, 
                                 u.UOMCode ?? "", 

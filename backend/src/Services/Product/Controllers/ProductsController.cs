@@ -56,14 +56,15 @@ public class ProductsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetProducts([FromQuery] Guid? storeId = null)
+    [Authorize(Policy = "AllowServiceAuth")]
+    public async Task<IActionResult> GetProducts([FromQuery] Guid? storeId = null, [FromQuery] bool includeStock = true)
     {
         var tenantId = GetCurrentTenantId();
         // If storeId is not provided in query, use the one from token claim as fallback (legacy behavior)
         // BUT if provided, use it.
         var finalStoreId = storeId.HasValue ? storeId.Value : GetCurrentStoreId();
         
-        var products = await _productService.GetProductsAsync(tenantId, finalStoreId);
+        var products = await _productService.GetProductsAsync(tenantId, finalStoreId, includeStock);
         return Ok(products);
     }
 
@@ -158,14 +159,15 @@ public class ProductsController : ControllerBase
     }
 
     [HttpGet("search")]
-    public async Task<IActionResult> SearchProducts([FromQuery] string term)
+    [Authorize(Policy = "AllowServiceAuth")]
+    public async Task<IActionResult> SearchProducts([FromQuery] string term, [FromQuery] bool includeStock = true)
     {
         if (string.IsNullOrWhiteSpace(term) || term.Length < 2)
             return Ok(Array.Empty<object>());
 
         var tenantId = GetCurrentTenantId();
         var storeId = GetCurrentStoreId();
-        var products = await _productService.SearchProductsAsync(term, tenantId, storeId);
+        var products = await _productService.SearchProductsAsync(term, tenantId, storeId, includeStock);
         return Ok(products);
     }
 

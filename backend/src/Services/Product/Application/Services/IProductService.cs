@@ -4,10 +4,10 @@ namespace Profitzen.Product.Application.Services;
 
 public interface IProductService
 {
-    Task<IEnumerable<ProductDto>> GetProductsAsync(string tenantId, Guid? storeId = null);
+    Task<IEnumerable<ProductDto>> GetProductsAsync(string tenantId, Guid? storeId = null, bool includeStock = true);
     Task<ProductDto?> GetProductByIdAsync(Guid id);
     Task<ProductDto?> GetProductByCodeAsync(string code, string tenantId);
-    Task<IEnumerable<ProductDto>> SearchProductsAsync(string searchTerm, string tenantId, Guid storeId);
+    Task<IEnumerable<ProductDto>> SearchProductsAsync(string searchTerm, string tenantId, Guid storeId, bool includeStock = true);
     Task<ProductDto> CreateProductAsync(CreateProductRequest request, string tenantId, Guid userId);
     Task<ProductDto> UpdateProductAsync(Guid id, UpdateProductRequest request, Guid userId);
     Task<bool> DeleteProductAsync(Guid id, Guid userId);

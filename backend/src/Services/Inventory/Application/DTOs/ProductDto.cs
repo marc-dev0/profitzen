@@ -12,7 +12,8 @@ public record ProductDto(
     decimal SalePrice,
     decimal WholesalePrice,
     bool IsActive,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    decimal UnitCost = 0
 );
 
 public record CreateProductRequest(
@@ -47,7 +48,9 @@ public record StoreInventoryDto(
     DateTime CreatedAt,
     string? Barcode = null,
     string? ShortScanCode = null,
-    decimal UnitCost = 0
+    decimal UnitCost = 0,
+    decimal PurchasePrice = 0,
+    string? PurchaseUOMName = null
 );
 
 public record CreateStoreInventoryRequest(

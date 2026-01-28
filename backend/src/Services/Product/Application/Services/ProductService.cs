@@ -30,16 +30,43 @@ public class ProductService : IProductService
         _logger = logger;
     }
 
-    public async Task<IEnumerable<ProductDto>> GetProductsAsync(string tenantId, Guid? storeId = null)
+    public async Task<IEnumerable<ProductDto>> GetProductsAsync(string tenantId, Guid? storeId = null, bool includeStock = true)
     {
         Console.WriteLine($"[DEBUG] GetProductsAsync called for tenant: {tenantId}, store: {storeId}");
-        var products = await _context.Products
-            .Include(p => p.PurchaseUOMs.OrderBy(pu => pu.CreatedAt))
-            .Include(p => p.SaleUOMs.OrderBy(su => su.CreatedAt))
+        
+        // Load entities first with all navigation properties
+        var productEntities = await _context.Products
+            .AsNoTracking()
+            .Include(p => p.PurchaseUOMs)
+            .Include(p => p.SaleUOMs)
                 .ThenInclude(su => su.Prices)
                     .ThenInclude(price => price.PriceList)
             .Where(p => p.TenantId == tenantId)
-            .Select(p => new ProductDto
+            .ToListAsync();
+
+        Console.WriteLine($"[DEBUG] Retrieved {productEntities.Count} product entities");
+        
+        // Debug: Check if PurchaseUOMs are loaded
+        foreach(var entity in productEntities.Take(3))
+        {
+            Console.WriteLine($"[DEBUG] Entity {entity.Name}: PurchaseUOMs count = {entity.PurchaseUOMs?.Count ?? 0}");
+            if (entity.PurchaseUOMs != null && entity.PurchaseUOMs.Any())
+            {
+                foreach(var pu in entity.PurchaseUOMs)
+                {
+                    Console.WriteLine($"[DEBUG]   - UOM {pu.UOMId}, Conversion: {pu.ConversionToBase}, IsDefault: {pu.IsDefault}");
+                }
+            }
+        }
+
+        // Project to DTOs in memory where navigation properties are available
+        var products = productEntities.Select(p =>
+        {
+            var defaultPurchaseUOM = p.PurchaseUOMs?.FirstOrDefault(pu => pu.IsDefault);
+            var conversionFactor = defaultPurchaseUOM?.ConversionToBase ?? 1m;
+            var unitCost = p.PurchasePrice / (conversionFactor > 0 ? conversionFactor : 1m);
+            
+            return new ProductDto
             {
                 Id = p.Id,
                 Code = p.Code,
@@ -58,8 +85,9 @@ public class ProductService : IProductService
                 BaseUOMCode = null,
                 BaseUOMName = null,
                 AllowFractional = p.AllowFractional,
-                PurchaseUOMId = p.PurchaseUOMs.Where(pu => pu.IsDefault).Select(pu => (Guid?)pu.UOMId).FirstOrDefault(),
-                PurchaseUOMs = p.PurchaseUOMs.Select(pu => new ProductPurchaseUOMDto
+                UnitCost = unitCost,  // CRITICAL: Set it here so it's included in the DTO
+                PurchaseUOMId = defaultPurchaseUOM?.UOMId,
+                PurchaseUOMs = p.PurchaseUOMs?.Select(pu => new ProductPurchaseUOMDto
                 {
                     Id = pu.Id,
                     ProductId = pu.ProductId,
@@ -69,8 +97,8 @@ public class ProductService : IProductService
                     ConversionToBase = pu.ConversionToBase,
                     IsDefault = pu.IsDefault,
                     IsActive = pu.IsActive
-                }).ToList(),
-                SaleUOMs = p.SaleUOMs.Select(su => new ProductSaleUOMDto
+                }).ToList() ?? new List<ProductPurchaseUOMDto>(),
+                SaleUOMs = p.SaleUOMs?.Select(su => new ProductSaleUOMDto
                 {
                     Id = su.Id,
                     ProductId = su.ProductId,
@@ -81,26 +109,37 @@ public class ProductService : IProductService
                     Price = su.Price,
                     IsDefault = su.IsDefault,
                     IsActive = su.IsActive,
-                    Prices = su.Prices.Select(p => new ProductSaleUOMPriceDto
+                    Prices = su.Prices?.Select(price => new ProductSaleUOMPriceDto
                     {
-                        Id = p.Id,
-                        ProductSaleUOMId = p.ProductSaleUOMId,
-                        PriceListId = p.PriceListId,
-                        PriceListName = p.PriceList.Name,
-                        PriceListCode = p.PriceList.Code,
-                        Price = p.Price
-                    }).ToList()
-                }).ToList(),
+                        Id = price.Id,
+                        ProductSaleUOMId = price.ProductSaleUOMId,
+                        PriceListId = price.PriceListId,
+                        PriceListName = price.PriceList?.Name ?? string.Empty,
+                        PriceListCode = price.PriceList?.Code ?? string.Empty,
+                        Price = price.Price
+                    }).ToList() ?? new List<ProductSaleUOMPriceDto>()
+                }).ToList() ?? new List<ProductSaleUOMDto>(),
                 CreatedAt = p.CreatedAt,
                 UpdatedAt = p.UpdatedAt
-            })
-            .ToListAsync();
+            };
+        }).ToList();
 
-        Console.WriteLine($"[DEBUG] Retrieved {products.Count} products, now enriching...");
+        Console.WriteLine($"[DEBUG] Mapped to {products.Count} DTOs");
+
+        Console.WriteLine($"[DEBUG] Retrieved {products.Count} products");
+        
+        // Log first few products with their UnitCost
+        foreach(var product in products.Take(5)) {
+            Console.WriteLine($"[DEBUG] Product: {product.Name}");
+            Console.WriteLine($"[DEBUG]   - PurchasePrice: {product.PurchasePrice}");
+            Console.WriteLine($"[DEBUG]   - UnitCost: {product.UnitCost}");
+        }
+        
+        Console.WriteLine($"[DEBUG] Now enriching...");
         await _enrichmentService.EnrichProductsAsync(products, tenantId, storeId);
         
         // Explicitly enrich with stock data using the robust internal endpoint
-        if (storeId.HasValue)
+        if (includeStock && storeId.HasValue)
         {
             await EnrichWithStockDataAsync(products, storeId.Value, tenantId);
         }
@@ -113,8 +152,8 @@ public class ProductService : IProductService
     public async Task<ProductDto?> GetProductByIdAsync(Guid id)
     {
         var product = await _context.Products
-            .Include(p => p.PurchaseUOMs.OrderBy(pu => pu.CreatedAt))
-            .Include(p => p.SaleUOMs.OrderBy(su => su.CreatedAt))
+            .Include(p => p.PurchaseUOMs)
+            .Include(p => p.SaleUOMs)
                 .ThenInclude(su => su.Prices)
                     .ThenInclude(price => price.PriceList)
             .FirstOrDefaultAsync(p => p.Id == id);
@@ -207,21 +246,34 @@ public class ProductService : IProductService
         };
     }
 
-    public async Task<IEnumerable<ProductDto>> SearchProductsAsync(string searchTerm, string tenantId, Guid storeId)
+    public async Task<IEnumerable<ProductDto>> SearchProductsAsync(string searchTerm, string tenantId, Guid storeId, bool includeStock = true)
     {
         var term = searchTerm.ToLower();
 
-        var products = await _context.Products
-            .Include(p => p.PurchaseUOMs.OrderBy(pu => pu.CreatedAt))
-            .Include(p => p.SaleUOMs.OrderBy(su => su.CreatedAt))
+        // 1. Fetch ENTITIES first (not DTOs) to allow complex in-memory calculations
+        var productEntities = await _context.Products
+            .Include(p => p.PurchaseUOMs)
+            .Include(p => p.SaleUOMs)
             .Where(p => p.TenantId == tenantId &&
                         p.IsActive &&
                         (p.Code.ToLower().Contains(term) ||
                          p.Name.ToLower().Contains(term) ||
                          (p.Barcode != null && p.Barcode.ToLower().Contains(term)) ||
                          (p.ShortScanCode != null && p.ShortScanCode.ToLower().Contains(term))))
-            .Take(10)
-            .Select(p => new ProductDto
+            .Take(20)
+            .ToListAsync();
+
+        // 2. Map to DTOs in memory with correct UnitCost calculation
+        var products = productEntities.Select(p =>
+        {
+            var defaultPurchaseUOM = p.PurchaseUOMs?.FirstOrDefault(pu => pu.IsDefault);
+            var conversionFactor = defaultPurchaseUOM?.ConversionToBase ?? 1m;
+            // Avoid division by zero
+            if (conversionFactor <= 0) conversionFactor = 1m;
+            
+            var unitCost = p.PurchasePrice / conversionFactor;
+
+            return new ProductDto
             {
                 Id = p.Id,
                 Code = p.Code,
@@ -237,10 +289,11 @@ public class ProductService : IProductService
                 WholesalePrice = p.WholesalePrice,
                 IsActive = p.IsActive,
                 BaseUOMId = p.BaseUOMId,
-                PurchaseUOMId = p.PurchaseUOMs.Where(pu => pu.IsDefault).Select(pu => (Guid?)pu.UOMId).FirstOrDefault(),
+                UnitCost = unitCost, // Correctly calculated here
+                PurchaseUOMId = defaultPurchaseUOM?.UOMId,
                 CreatedAt = p.CreatedAt,
                 UpdatedAt = p.UpdatedAt,
-                PurchaseUOMs = p.PurchaseUOMs.Select(pu => new ProductPurchaseUOMDto
+                PurchaseUOMs = p.PurchaseUOMs?.Select(pu => new ProductPurchaseUOMDto
                 {
                     Id = pu.Id,
                     ProductId = pu.ProductId,
@@ -249,8 +302,8 @@ public class ProductService : IProductService
                     UOMName = string.Empty,
                     ConversionToBase = pu.ConversionToBase,
                     IsDefault = pu.IsDefault
-                }).ToList(),
-                SaleUOMs = p.SaleUOMs.Select(su => new ProductSaleUOMDto
+                }).ToList() ?? new List<ProductPurchaseUOMDto>(),
+                SaleUOMs = p.SaleUOMs?.Select(su => new ProductSaleUOMDto
                 {
                     Id = su.Id,
                     ProductId = su.ProductId,
@@ -259,12 +312,21 @@ public class ProductService : IProductService
                     UOMName = string.Empty,
                     ConversionToBase = su.ConversionToBase,
                     IsDefault = su.IsDefault
-                }).ToList()
-            })
-            .ToListAsync();
+                }).ToList() ?? new List<ProductSaleUOMDto>()
+            };
+        }).ToList();
+        
+        // Debug
+        Console.WriteLine($"[DEBUG] Search found {products.Count} products");
+        foreach(var p in products) {
+             Console.WriteLine($"[DEBUG] Search Result: {p.Name}, Price: {p.PurchasePrice}, UnitCost: {p.UnitCost}");
+        }
 
         await _enrichmentService.EnrichProductsAsync(products, tenantId);
-        await EnrichWithStockDataAsync(products, storeId, tenantId);
+        if (includeStock)
+        {
+            await EnrichWithStockDataAsync(products, storeId, tenantId);
+        }
 
         return products;
     }
@@ -333,7 +395,10 @@ public class ProductService : IProductService
         int CurrentStock,
         int MinimumStock,
         bool IsLowStock,
-        DateTime CreatedAt
+        DateTime CreatedAt,
+        string? Barcode = null,
+        string? ShortScanCode = null,
+        decimal UnitCost = 0
     );
 
     public async Task<ProductDto> CreateProductAsync(CreateProductRequest request, string tenantId, Guid userId)
@@ -514,8 +579,8 @@ public class ProductService : IProductService
     public async Task<ProductDto> UpdateProductAsync(Guid id, UpdateProductRequest request, Guid userId)
     {
         var product = await _context.Products
-            .Include(p => p.PurchaseUOMs.OrderBy(pu => pu.CreatedAt))
-            .Include(p => p.SaleUOMs.OrderBy(su => su.CreatedAt))
+            .Include(p => p.PurchaseUOMs)
+            .Include(p => p.SaleUOMs)
                 .ThenInclude(su => su.Prices)
             .FirstOrDefaultAsync(p => p.Id == id);
 
@@ -523,6 +588,7 @@ public class ProductService : IProductService
             throw new InvalidOperationException("Product not found");
 
         product.Update(request.Name, request.Description ?? string.Empty, request.CategoryId);
+        product.UpdatePrices(request.PurchasePrice, request.SalePrice, request.WholesalePrice);
 
         if (!string.IsNullOrEmpty(request.Code))
         {

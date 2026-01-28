@@ -61,6 +61,8 @@ public record ProductSearchDto(
     int MinimumStock,
     string? Barcode = null,
     string? ShortScanCode = null,
+    decimal UnitCost = 0,
+    string? PurchaseUOMName = null,
     List<ProductSaleUOMDto>? SaleUOMs = null
 );
 
