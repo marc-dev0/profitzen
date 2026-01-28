@@ -1206,7 +1206,7 @@ export default function InventarioPage() {
                                         </div>
 
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                                            <label className="block text-sm font-medium text-foreground mb-2">
                                                 Tipo de Movimiento *
                                             </label>
                                             <div className="space-y-2">
@@ -1217,7 +1217,7 @@ export default function InventarioPage() {
                                                         onChange={() => setIsPositive(false)}
                                                         className="w-4 h-4 text-blue-600"
                                                     />
-                                                    <span className="text-sm text-slate-900">Disminuir Stock (Negativo)</span>
+                                                    <span className="text-sm text-foreground">Disminuir Stock (Negativo)</span>
                                                 </label>
                                                 <label className="flex items-center gap-2 cursor-pointer">
                                                     <input
@@ -1226,20 +1226,20 @@ export default function InventarioPage() {
                                                         onChange={() => setIsPositive(true)}
                                                         className="w-4 h-4 text-blue-600"
                                                     />
-                                                    <span className="text-sm text-slate-900">Aumentar Stock (Positivo)</span>
+                                                    <span className="text-sm text-foreground">Aumentar Stock (Positivo)</span>
                                                 </label>
                                             </div>
                                         </div>
 
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                                <label className="block text-sm font-medium text-foreground mb-1">
                                                     Unidad de Medida *
                                                 </label>
                                                 <select
                                                     value={selectedUomId}
                                                     onChange={(e) => setSelectedUomId(e.target.value)}
-                                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-slate-900"
+                                                    className="w-full px-3 py-2 border border-input rounded-lg focus:ring-2 focus:ring-primary text-foreground bg-background"
                                                     required
                                                 >
                                                     {availableUOMs.map((uom) => (
@@ -1250,14 +1250,14 @@ export default function InventarioPage() {
                                                 </select>
                                             </div>
                                             <div>
-                                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                                <label className="block text-sm font-medium text-foreground mb-1">
                                                     Cantidad *
                                                 </label>
                                                 <input
                                                     type="number"
                                                     value={adjustmentQuantity}
                                                     onChange={(e) => setAdjustmentQuantity(e.target.value)}
-                                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-slate-900"
+                                                    className="w-full px-3 py-2 border border-input rounded-lg focus:ring-2 focus:ring-primary text-foreground bg-background"
                                                     min="0.01"
                                                     step="0.01"
                                                     required
@@ -1285,12 +1285,12 @@ export default function InventarioPage() {
                                                         handleAdjustmentSubmit(e as any);
                                                     }
                                                 }}
-                                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-slate-900"
+                                                className="w-full px-3 py-2 border border-input rounded-lg focus:ring-2 focus:ring-primary text-foreground bg-background"
                                                 rows={3}
                                                 required
                                                 minLength={20}
                                             />
-                                            <div className="flex justify-between items-start mt-1 text-xs text-slate-500">
+                                            <div className="flex justify-between items-start mt-1 text-xs text-muted-foreground">
                                                 <span>{adjustmentReason.length}/20 caracteres</span>
                                                 <span className="text-blue-600 font-medium">Ctrl + Enter para guardar</span>
                                             </div>
@@ -1298,7 +1298,7 @@ export default function InventarioPage() {
                                     </>
                                 )}
 
-                                <div className="flex gap-3 pt-4 border-t border-slate-200">
+                                <div className="flex gap-3 pt-4 border-t border-border">
                                     <button
                                         type="button"
                                         onClick={closeAdjustmentDialog}
