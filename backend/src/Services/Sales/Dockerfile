@@ -12,5 +12,6 @@ RUN dotnet publish "Profitzen.Sales.csproj" -c Release -o /app/publish /p:UseApp
 
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 WORKDIR /app
+RUN apt-get update && apt-get install -y libfontconfig1 && rm -rf /var/lib/apt/lists/*
 COPY --from=publish /app/publish .
 ENTRYPOINT ["dotnet", "Profitzen.Sales.dll"]

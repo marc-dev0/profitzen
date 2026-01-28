@@ -35,7 +35,9 @@ const printTicketFromBackend = async (
     });
 
     if (!response.ok) {
-      throw new Error(`Error generating ticket: ${response.statusText}`);
+      const errorText = await response.text();
+      console.error('Ticket generation failed:', errorText);
+      throw new Error(`Error generating ticket: ${response.status} ${response.statusText}`);
     }
 
     const blob = await response.blob();

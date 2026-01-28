@@ -90,7 +90,6 @@ public class SalesService : ISalesService
                 if (existingCustomer == null)
                 {
                     _logger.LogInformation("Customer {CustomerId} not found locally. Fetching from Customer Service...", request.CustomerId);
-                    // Pass tenantId to ensure correct context
                     var remoteCustomer = await _customerClient.GetCustomerByIdAsync(request.CustomerId.Value, tenantId);
                     
                     if (remoteCustomer != null)
@@ -106,7 +105,6 @@ public class SalesService : ISalesService
                             remoteCustomer.CreditLimit
                         );
 
-                        // Sync CurrentDebt as well
                         if (remoteCustomer.CurrentDebt > 0)
                         {
                             newLocalCustomer.AddDebt(remoteCustomer.CurrentDebt);
@@ -1060,6 +1058,17 @@ public class SalesService : ISalesService
             });
         });
 
-        return document.GeneratePdf();
+        try
+        {
+            _logger.LogInformation("Generating PDF for Sale {SaleId}", saleId);
+            var pdfBytes = document.GeneratePdf();
+            _logger.LogInformation("PDF generated successfully for Sale {SaleId}, Size: {Size} bytes", saleId, pdfBytes.Length);
+            return pdfBytes;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to generate PDF for Sale {SaleId}", saleId);
+            throw new InvalidOperationException("Error interno al generar el PDF del ticket.", ex);
+        }
     }
 }
