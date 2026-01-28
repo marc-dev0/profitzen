@@ -6,6 +6,7 @@ import apiClient from '@/lib/axios';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { useAuthStore } from '@/store/authStore';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCompanySettings } from '@/hooks/useCompanySettings';
 import AppLayout from '@/components/layout/AppLayout';
 import { FormattedDateInput } from '@/components/ui/formatted-date-input';
@@ -86,6 +87,7 @@ const paymentMethodLabels = {
 
 function SalesContent() {
     const router = useRouter();
+    const queryClient = useQueryClient();
     const searchParams = useSearchParams();
     const initialSearch = searchParams?.get('q') || '';
     const { user } = useAuthStore();
@@ -164,6 +166,8 @@ function SalesContent() {
             toast.success('Venta anulada correctamente');
             setShowCancelModal(false);
             setSelectedSale(null);
+            queryClient.invalidateQueries({ queryKey: ['store-inventory'] });
+            queryClient.invalidateQueries({ queryKey: ['products'] });
             fetchSales();
         } catch (error: any) {
             console.error('Error cancelling sale:', error);
@@ -188,6 +192,8 @@ function SalesContent() {
             toast.success('Venta devuelta correctamente');
             setShowReturnModal(false);
             setSelectedSale(null);
+            queryClient.invalidateQueries({ queryKey: ['store-inventory'] });
+            queryClient.invalidateQueries({ queryKey: ['products'] });
             fetchSales();
         } catch (error: any) {
             console.error('Error returning sale:', error);

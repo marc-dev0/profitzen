@@ -167,30 +167,57 @@ public class InventoryService : IInventoryService
             .Where(si => si.StoreId == storeId && si.CurrentStock <= si.MinimumStock)
             .ToListAsync();
 
-        var result = new List<StoreInventoryDto>();
+        if (!inventoryItems.Any()) return [];
 
-        foreach (var item in inventoryItems)
+        var productServiceUrl = _configuration["Services:ProductService:Url"] ?? "http://localhost:5005";
+        var client = _httpClientFactory.CreateClient();
+        if (!string.IsNullOrEmpty(token))
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        try
         {
-            var product = await GetProductFromServiceAsync(item.ProductId, item.TenantId);
-            if (product != null)
+            var response = await client.GetAsync($"{productServiceUrl}/api/products?storeId={storeId}");
+            if (response.IsSuccessStatusCode)
             {
-                result.Add(new StoreInventoryDto(
-                    item.Id,
-                    item.ProductId,
-                    product.Code,
-                    product.Name,
-                    product.CategoryName,
-                    item.StoreId,
-                    item.CurrentStock,
-                    item.MinimumStock,
-                    item.IsLowStock(),
-                    item.CreatedAt,
-                    null, null, product.PurchasePrice
-                ));
+                var json = await response.Content.ReadAsStringAsync();
+                var products = JsonSerializer.Deserialize<List<InternalProductResponse>>(json, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+                var productMap = products?.ToDictionary(p => p.Id) ?? new Dictionary<Guid, InternalProductResponse>();
+
+                return inventoryItems.Select(item =>
+                {
+                    productMap.TryGetValue(item.ProductId, out var product);
+                    return new StoreInventoryDto(
+                        item.Id,
+                        item.ProductId,
+                        product?.Code ?? "UNKNOWN",
+                        product?.Name ?? "Producto Desconocido",
+                        product?.CategoryName,
+                        item.StoreId,
+                        item.CurrentStock,
+                        item.MinimumStock,
+                        item.IsLowStock(),
+                        item.CreatedAt,
+                        product?.Barcode,
+                        product?.ShortScanCode,
+                        product?.PurchasePrice ?? 0
+                    );
+                }).ToList();
             }
         }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching products for low stock inventory");
+        }
 
-        return result;
+        // Fallback or empty? Better try individual if batch fails? 
+        // For performance, if batch fails we should probably just return what we have with empty names.
+        return inventoryItems.Select(item => new StoreInventoryDto(
+            item.Id, item.ProductId, "ERR", "Error de Carga", null, item.StoreId, item.CurrentStock, item.MinimumStock, item.IsLowStock(), item.CreatedAt
+        )).ToList();
     }
 
     public async Task<IEnumerable<StoreInventoryDto>> GetStoreInventoryAsync(Guid storeId, string? token = null)
@@ -199,30 +226,55 @@ public class InventoryService : IInventoryService
             .Where(si => si.StoreId == storeId)
             .ToListAsync();
 
-        var result = new List<StoreInventoryDto>();
+        if (!inventoryItems.Any()) return [];
 
-        foreach (var item in inventoryItems)
+        var productServiceUrl = _configuration["Services:ProductService:Url"] ?? "http://localhost:5005";
+        var client = _httpClientFactory.CreateClient();
+        if (!string.IsNullOrEmpty(token))
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        try
         {
-            var product = await GetProductFromServiceAsync(item.ProductId, item.TenantId);
-            if (product != null)
+            var response = await client.GetAsync($"{productServiceUrl}/api/products?storeId={storeId}");
+            if (response.IsSuccessStatusCode)
             {
-                result.Add(new StoreInventoryDto(
-                    item.Id,
-                    item.ProductId,
-                    product.Code,
-                    product.Name,
-                    product.CategoryName,
-                    item.StoreId,
-                    item.CurrentStock,
-                    item.MinimumStock,
-                    item.IsLowStock(),
-                    item.CreatedAt,
-                    null, null, product.PurchasePrice
-                ));
+                var json = await response.Content.ReadAsStringAsync();
+                var products = JsonSerializer.Deserialize<List<InternalProductResponse>>(json, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+                var productMap = products?.ToDictionary(p => p.Id) ?? new Dictionary<Guid, InternalProductResponse>();
+
+                return inventoryItems.Select(item =>
+                {
+                    productMap.TryGetValue(item.ProductId, out var product);
+                    return new StoreInventoryDto(
+                        item.Id,
+                        item.ProductId,
+                        product?.Code ?? "UNKNOWN",
+                        product?.Name ?? "Producto Desconocido",
+                        product?.CategoryName,
+                        item.StoreId,
+                        item.CurrentStock,
+                        item.MinimumStock,
+                        item.IsLowStock(),
+                        item.CreatedAt,
+                        product?.Barcode,
+                        product?.ShortScanCode,
+                        product?.PurchasePrice ?? 0
+                    );
+                }).ToList();
             }
         }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching products for store inventory");
+        }
 
-        return result;
+        return inventoryItems.Select(item => new StoreInventoryDto(
+            item.Id, item.ProductId, "ERR", "Error de Carga", null, item.StoreId, item.CurrentStock, item.MinimumStock, item.IsLowStock(), item.CreatedAt
+        )).ToList();
     }
 
     public async Task<StoreInventoryDto> CreateStoreInventoryAsync(CreateStoreInventoryRequest request, Guid storeId, string tenantId, Guid userId, string? token = null)
