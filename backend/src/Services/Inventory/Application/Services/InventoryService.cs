@@ -124,6 +124,7 @@ public class InventoryService : IInventoryService
         bool IsActive,
         string? Barcode,
         string? ShortScanCode,
+        List<ProductPurchaseUOMInfo>? PurchaseUOMs,
         List<ProductSaleUOMInfo>? SaleUOMs
     );
 
@@ -190,6 +191,12 @@ public class InventoryService : IInventoryService
                 return inventoryItems.Select(item =>
                 {
                     productMap.TryGetValue(item.ProductId, out var product);
+                    
+                    // Calculate Unit Cost in Base Units
+                    var defaultPurchaseUOM = product?.PurchaseUOMs?.FirstOrDefault(pu => pu.IsDefault);
+                    var conversionFactor = defaultPurchaseUOM?.ConversionToBase ?? 1;
+                    var unitCostInBaseUnits = (product?.PurchasePrice ?? 0) / (conversionFactor > 0 ? conversionFactor : 1);
+
                     return new StoreInventoryDto(
                         item.Id,
                         item.ProductId,
@@ -203,7 +210,7 @@ public class InventoryService : IInventoryService
                         item.CreatedAt,
                         product?.Barcode,
                         product?.ShortScanCode,
-                        product?.PurchasePrice ?? 0
+                        unitCostInBaseUnits
                     );
                 }).ToList();
             }
@@ -249,6 +256,12 @@ public class InventoryService : IInventoryService
                 return inventoryItems.Select(item =>
                 {
                     productMap.TryGetValue(item.ProductId, out var product);
+
+                    // Calculate Unit Cost in Base Units
+                    var defaultPurchaseUOM = product?.PurchaseUOMs?.FirstOrDefault(pu => pu.IsDefault);
+                    var conversionFactor = defaultPurchaseUOM?.ConversionToBase ?? 1;
+                    var unitCostInBaseUnits = (product?.PurchasePrice ?? 0) / (conversionFactor > 0 ? conversionFactor : 1);
+
                     return new StoreInventoryDto(
                         item.Id,
                         item.ProductId,
@@ -262,7 +275,7 @@ public class InventoryService : IInventoryService
                         item.CreatedAt,
                         product?.Barcode,
                         product?.ShortScanCode,
-                        product?.PurchasePrice ?? 0
+                        unitCostInBaseUnits
                     );
                 }).ToList();
             }

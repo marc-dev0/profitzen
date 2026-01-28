@@ -58,9 +58,14 @@ export default function ProductsPage() {
       defaultPrice = product.salePrice;
     }
 
+    const defaultPurchaseUOM = product.purchaseUOMs?.find(uom => uom.isDefault) || product.purchaseUOMs?.[0];
+    const conversionFactor = defaultPurchaseUOM?.conversionToBase || 1;
+    const unitCost = (product.purchasePrice || 0) / (conversionFactor > 0 ? conversionFactor : 1);
+
     return {
       ...product,
       defaultPrice,
+      unitCost,
       defaultUOMName: defaultSaleUOM?.uomName || defaultSaleUOM?.uomCode || 'UND'
     };
   }) || [];
@@ -68,7 +73,7 @@ export default function ProductsPage() {
   const getTotalProducts = () => enrichedProducts.length;
   const getLowStockCount = () => enrichedProducts.filter(p => (p.currentStock || 0) <= (p.minimumStock || 0)).length;
   const getOutOfStockCount = () => enrichedProducts.filter(p => (p.currentStock || 0) === 0).length;
-  const getTotalValue = () => enrichedProducts.reduce((sum, p) => sum + ((p.currentStock || 0) * p.defaultPrice), 0);
+  const getTotalValue = () => enrichedProducts.reduce((sum, p) => sum + ((p.currentStock || 0) * p.unitCost), 0);
 
   // Define columns for DataTable
   const productColumns: Column<typeof enrichedProducts[0]>[] = [
@@ -154,7 +159,7 @@ export default function ProductsPage() {
       sortable: true,
       sortKey: 'currentStock',
       render: (product) => {
-        const value = (product.currentStock || 0) * product.defaultPrice;
+        const value = (product.currentStock || 0) * product.unitCost;
         return (
           <span className="text-sm font-medium text-primary">
             {formatCurrency(value)}

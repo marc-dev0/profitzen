@@ -26,7 +26,7 @@ import BatchTransferDialog from './BatchTransferDialog';
 import BatchAdjustmentDialog from './BatchAdjustmentDialog';
 import TransferList from './TransferList';
 import AdjustmentList from './AdjustmentList';
-import { Package, AlertTriangle, TrendingUp, Edit2, Check, X, Plus, Minus, History, Printer } from 'lucide-react';
+import { Package, AlertTriangle, TrendingUp, Edit2, Check, X, Plus, Minus, History, Printer, Coins } from 'lucide-react';
 import { generateAdjustmentPDF, generateTransferPDF } from '@/utils/pdfGenerator';
 
 
@@ -67,13 +67,20 @@ export default function InventarioPage() {
 
         return products.map(product => {
             const existing = inventoryMap.get(product.id);
+
+            // Calculate base unit cost
+            const defaultPurchaseUOM = (product as any).purchaseUOMs?.find((u: any) => u.isDefault) || (product as any).purchaseUOMs?.[0];
+            const conversionFactor = defaultPurchaseUOM?.conversionToBase || 1;
+            const unitCost = ((product as any).purchasePrice || 0) / (conversionFactor > 0 ? conversionFactor : 1);
+
             if (existing) {
                 return {
                     ...existing,
                     barcode: (product as any).barcode || existing.barcode,
                     shortScanCode: (product as any).shortScanCode || existing.shortScanCode,
                     productName: product.name, // Ensure sync
-                    productCode: product.code
+                    productCode: product.code,
+                    unitCost // Use calculated base unit cost
                 };
             }
 
@@ -89,7 +96,7 @@ export default function InventarioPage() {
                 storeId: user?.currentStoreId || '',
                 barcode: (product as any).barcode,
                 shortScanCode: (product as any).shortScanCode,
-                unitCost: (product as any).purchasePrice || 0
+                unitCost
             } as StoreInventoryItem;
         });
     }, [inventory, products, user?.currentStoreId]);
@@ -401,9 +408,10 @@ export default function InventarioPage() {
         }
     };
 
-    const getTotalProducts = () => inventory?.length || 0;
-    const getLowStockCount = () => inventory?.filter(i => i.currentStock <= i.minimumStock).length || 0;
-    const getOutOfStockCount = () => inventory?.filter(i => i.currentStock === 0).length || 0;
+    const getTotalProducts = () => mergedInventory.length || 0;
+    const getLowStockCount = () => mergedInventory.filter(i => i.currentStock <= i.minimumStock).length || 0;
+    const getOutOfStockCount = () => mergedInventory.filter(i => i.currentStock === 0).length || 0;
+    const getTotalValue = () => mergedInventory.reduce((sum, item) => sum + (item.currentStock * (item.unitCost || 0)), 0);
 
     // Stock View Columns
     const stockColumns: Column<StoreInventoryItem>[] = [
@@ -868,7 +876,7 @@ export default function InventarioPage() {
                 </div>
 
                 {/* Stats Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
                     <div className="bg-card rounded-xl p-4 shadow-sm border border-border">
                         <div className="flex items-center justify-between">
                             <div>
@@ -894,6 +902,15 @@ export default function InventarioPage() {
                                 <p className="text-2xl font-bold text-red-600">{getOutOfStockCount()}</p>
                             </div>
                             <AlertTriangle className="w-8 h-8 text-red-600" />
+                        </div>
+                    </div>
+                    <div className="bg-emerald-600 rounded-xl p-4 shadow-sm border border-emerald-500 text-white">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm opacity-90">Valor Total Almacén</p>
+                                <p className="text-2xl font-bold">S/ {getTotalValue().toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                            </div>
+                            <Coins className="w-8 h-8 opacity-80" />
                         </div>
                     </div>
                 </div>
