@@ -142,7 +142,7 @@ services:
       dockerfile: Dockerfile
     restart: always
     environment:
-      - NEXT_PUBLIC_API_URL=https://${DOMAIN_NAME}/api
+      - NEXT_PUBLIC_API_URL=http://${DOMAIN_NAME}/api
     networks:
       - profitzen-prod-network
 
