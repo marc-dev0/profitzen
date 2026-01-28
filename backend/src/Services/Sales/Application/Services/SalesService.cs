@@ -105,6 +105,12 @@ public class SalesService : ISalesService
                             remoteCustomer.Address, 
                             remoteCustomer.CreditLimit
                         );
+
+                        // Sync CurrentDebt as well
+                        if (remoteCustomer.CurrentDebt > 0)
+                        {
+                            newLocalCustomer.AddDebt(remoteCustomer.CurrentDebt);
+                        }
                         
 
                         var idProperty = typeof(Customer).GetProperty("Id");
@@ -181,6 +187,22 @@ public class SalesService : ISalesService
                         request.UOMId, request.UOMCode);
 
             _logger.LogInformation("Item added to sale. New item count: {ItemCount}", sale.Items.Count);
+
+            // FORCE NEW ITEMS STATE TO ADDED
+            // This prevents DbUpdateConcurrencyException when IDs are pre-assigned
+            foreach (var item in sale.Items)
+            {
+                var entry = _context.Entry(item);
+                if (entry.State == EntityState.Detached || (item.UpdatedAt == item.CreatedAt && entry.State != EntityState.Deleted))
+                {
+                    // If it's a new item (or newly added to collection)
+                    if (entry.State != EntityState.Added && entry.State != EntityState.Modified)
+                    {
+                         _logger.LogInformation("Forcing item {ProductId} state to Added", item.ProductId);
+                         entry.State = EntityState.Added;
+                    }
+                }
+            }
 
             await _context.SaveChangesAsync();
 
