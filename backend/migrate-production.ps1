@@ -17,7 +17,8 @@ $services = @(
     @{Name="Inventory"; Path="src\Services\Inventory"},
     @{Name="Sales"; Path="src\Services\Sales"},
     @{Name="Customer"; Path="src\Services\Customer"},
-    @{Name="Analytics"; Path="src\Services\Analytics"}
+    @{Name="Analytics"; Path="src\Services\Analytics"},
+    @{Name="Product"; Path="src\Services\Product"}
 )
 
 foreach ($service in $services) {
