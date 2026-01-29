@@ -77,6 +77,8 @@ export default function EditProductPage() {
       categoryId: '',
       baseUOMId: '',
       allowFractional: false,
+      purchaseConversionMethod: 'base',
+      isActive: true,
     },
   });
 
@@ -150,6 +152,14 @@ export default function EditProductPage() {
       setValue('categoryId', productData.categoryId);
       setValue('baseUOMId', productData.baseUOMId);
       setValue('allowFractional', productData.allowFractional);
+      setValue('purchaseConversionMethod', productData.purchaseConversionMethod || 'base');
+
+      if (productData.purchaseConversionMethod) {
+        setCurrentPurchaseUOM(prev => ({
+          ...prev,
+          conversionRelativeTo: productData.purchaseConversionMethod as 'base' | 'previous'
+        }));
+      }
 
       const purchaseUOMsData = (productData.purchaseUOMs || []).map((pu, index) => ({
         uomId: pu.uomId,
@@ -336,6 +346,7 @@ export default function EditProductPage() {
         wholesalePrice: 0,
         baseUOMId: data.baseUOMId || undefined,
         allowFractional: data.allowFractional,
+        purchaseConversionMethod: data.purchaseConversionMethod,
         purchaseUOMs: purchaseUOMs.map(pu => ({
           uomId: pu.uomId,
           conversionToBase: pu.conversionToBase,
@@ -440,6 +451,11 @@ export default function EditProductPage() {
       conversionQuantity: '1',
       conversionRelativeTo: purchaseUOMs.length === 0 ? 'base' : 'previous'
     });
+
+    // Recuperar foco para seguir agregando
+    setTimeout(() => {
+      document.getElementById('purchaseUOMAutocomplete')?.focus();
+    }, 100);
   };
 
   const removePurchaseUOM = (index: number) => {
@@ -560,6 +576,11 @@ export default function EditProductPage() {
       conversionRelativeTo: 'base',
       pricesByList: initialPrices
     });
+
+    // Recuperar foco para seguir agregando
+    setTimeout(() => {
+      document.getElementById('saleUOMAutocomplete')?.focus();
+    }, 100);
   };
 
   const removeSaleUOM = (index: number) => {
@@ -859,7 +880,10 @@ export default function EditProductPage() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Option 1: Direct to Base */}
                         <div
-                          onClick={() => setCurrentPurchaseUOM({ ...currentPurchaseUOM, conversionRelativeTo: 'base' })}
+                          onClick={() => {
+                            setCurrentPurchaseUOM({ ...currentPurchaseUOM, conversionRelativeTo: 'base' });
+                            setValue('purchaseConversionMethod', 'base', { shouldDirty: true });
+                          }}
                           className={`relative cursor-pointer rounded-lg border-2 p-4 transition-all hover:border-primary/50 ${currentPurchaseUOM.conversionRelativeTo === 'base'
                             ? 'border-primary bg-primary/5 dark:bg-primary/10'
                             : 'border-border bg-card hover:bg-muted/50'
@@ -899,7 +923,10 @@ export default function EditProductPage() {
 
                         {/* Option 2: Relative to Previous */}
                         <div
-                          onClick={() => setCurrentPurchaseUOM({ ...currentPurchaseUOM, conversionRelativeTo: 'previous' })}
+                          onClick={() => {
+                            setCurrentPurchaseUOM({ ...currentPurchaseUOM, conversionRelativeTo: 'previous' });
+                            setValue('purchaseConversionMethod', 'previous', { shouldDirty: true });
+                          }}
                           className={`relative cursor-pointer rounded-lg border-2 p-4 transition-all hover:border-primary/50 ${currentPurchaseUOM.conversionRelativeTo === 'previous'
                             ? 'border-primary bg-primary/5 dark:bg-primary/10'
                             : 'border-border bg-card hover:bg-muted/50'

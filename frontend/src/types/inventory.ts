@@ -24,6 +24,7 @@ export interface Product {
   saleUOMCode?: string;
   saleUOMName?: string;
   allowFractional: boolean;
+  purchaseConversionMethod?: string;
   saleUOMs?: ProductSaleUOM[];
   purchaseUOMs?: ProductPurchaseUOM[];
   createdAt: string;

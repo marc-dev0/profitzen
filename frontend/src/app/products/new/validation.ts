@@ -9,6 +9,8 @@ export const productSchema = z.object({
   categoryId: z.string().min(1, 'Debe seleccionar una categoría'),
   baseUOMId: z.string().optional(),
   allowFractional: z.boolean(),
+  purchaseConversionMethod: z.string().optional(),
+  isActive: z.boolean().optional(),
 });
 
 export type ProductFormData = z.infer<typeof productSchema>;
