@@ -1,53 +1,36 @@
-# Profitzen - Guía de Despliegue y Mantenimiento (VPS)
+# Profitzen - Guía de Despliegue Simplificada (VPS)
 
-Esta guía detalla el proceso para actualizar la aplicación en el servidor VPS, incluyendo la actualización de código y la migración de base de datos.
+Esta guía detalla el proceso para actualizar la aplicación en el servidor VPS. 
 
-## 1. Actualización de Código
-Para bajar los últimos cambios desde el repositorio de GitHub:
+**Nota:** Gracias a la configuración automática de Profitzen, las bases de datos se actualizan solas al iniciar los servicios.
 
+## Pasos para Actualizar
+
+### 1. Bajar los últimos cambios
 ```bash
 cd ~/profitzen
 git pull origin master
 ```
 
-## 2. Actualización de la Base de Datos (Migraciones)
-Cuando se agregan nuevos campos o tablas (como el campo `PurchaseConversionMethod` en Productos), es necesario indicarle a la base de datos que actualice su estructura.
+### 2. Actualizar y Reiniciar Servicios
+Este comando compilará el nuevo código y aplicará automáticamente cualquier cambio pendiente en la base de datos (migraciones).
 
-**IMPORTANTE:** En nuestro VPS, los contenedores se ejecutan sin el SDK de .NET por seguridad. Por lo tanto, las migraciones se ejecutan desde el host (servidor) donde sí tenemos instalada la herramienta `dotnet ef`.
-
-### Para el ambiente DEMO:
+#### Para ambiente DEMO:
 ```bash
-cd ~/profitzen/backend/src/Services/Product
-ASPNETCORE_ENVIRONMENT=Demo dotnet ef database update
-```
-
-### Para el ambiente PRODUCCIÓN:
-```bash
-cd ~/profitzen/backend/src/Services/Product
-ASPNETCORE_ENVIRONMENT=Production dotnet ef database update
-```
-
-## 3. Reconstrucción y Recompilación (Docker)
-Una vez actualizada la base de datos, debemos reconstruir las imágenes de Docker para que incluyan el nuevo código de las APIs y el Frontend.
-
-### Ambiente DEMO:
-```bash
-cd ~/profitzen
 docker-compose -f docker-compose.demo.yml up -d --build
 ```
 
-### Ambiente PRODUCCIÓN:
+#### Para ambiente PRODUCCIÓN:
 ```bash
-cd ~/profitzen
 docker-compose -f docker-compose.prod.yml up -d --build
 ```
 
-## 4. Comandos Útiles de Monitoreo
-Si algo no funciona, usa estos comandos para ver qué está pasando:
-
-* **Ver estado de contenedores:** `docker ps`
-* **Ver logs de un servicio (ej: productos):** `docker logs profitzen-product-service-1`
-* **Ver logs en tiempo real:** `docker-compose -f docker-compose.prod.yml logs -f`
+## Verificación
+Para confirmar que todo subió correctamente, puedes ver los logs:
+```bash
+# Ver si hubo errores en las migraciones de productos
+docker logs profitzen-product-service-demo-1
+```
 
 ---
-*Nota: Esta guía fue generada automáticamente tras la implementación de la persistencia de UOM.*
+*Manual actualizado el 28 de Enero, 2026.*
