@@ -85,6 +85,7 @@ public class ProductService : IProductService
                 BaseUOMCode = null,
                 BaseUOMName = null,
                 AllowFractional = p.AllowFractional,
+                PurchaseConversionMethod = p.PurchaseConversionMethod,
                 UnitCost = unitCost,  // CRITICAL: Set it here so it's included in the DTO
                 PurchaseUOMId = defaultPurchaseUOM?.UOMId,
                 PurchaseUOMs = p.PurchaseUOMs?.Select(pu => new ProductPurchaseUOMDto
@@ -179,6 +180,7 @@ public class ProductService : IProductService
             BaseUOMCode = null,
             BaseUOMName = null,
             AllowFractional = product.AllowFractional,
+            PurchaseConversionMethod = product.PurchaseConversionMethod,
             PurchaseUOMId = product.PurchaseUOMs.Where(pu => pu.IsDefault).Select(pu => (Guid?)pu.UOMId).FirstOrDefault(),
             PurchaseUOMs = product.PurchaseUOMs.Select(pu => new ProductPurchaseUOMDto
             {
@@ -289,6 +291,8 @@ public class ProductService : IProductService
                 WholesalePrice = p.WholesalePrice,
                 IsActive = p.IsActive,
                 BaseUOMId = p.BaseUOMId,
+                AllowFractional = p.AllowFractional,
+                PurchaseConversionMethod = p.PurchaseConversionMethod,
                 UnitCost = unitCost, // Correctly calculated here
                 PurchaseUOMId = defaultPurchaseUOM?.UOMId,
                 CreatedAt = p.CreatedAt,
@@ -422,7 +426,8 @@ public class ProductService : IProductService
             request.Barcode,
             request.AllowFractional,
             null,
-            request.ShortScanCode
+            request.ShortScanCode,
+            request.PurchaseConversionMethod ?? "base"
         );
 
         if (!string.IsNullOrEmpty(request.ImageUrl))
@@ -587,7 +592,7 @@ public class ProductService : IProductService
         if (product == null)
             throw new InvalidOperationException("Product not found");
 
-        product.Update(request.Name, request.Description ?? string.Empty, request.CategoryId);
+        product.Update(request.Name, request.Description ?? string.Empty, request.CategoryId, null, request.PurchaseConversionMethod);
         product.UpdatePrices(request.PurchasePrice, request.SalePrice, request.WholesalePrice);
 
         if (!string.IsNullOrEmpty(request.Code))

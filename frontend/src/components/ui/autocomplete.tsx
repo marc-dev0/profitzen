@@ -19,6 +19,7 @@ interface AutocompleteProps {
   emptyMessage?: string;
   onCreateNew?: () => void;
   createNewLabel?: string;
+  id?: string;
 }
 
 export function Autocomplete({
@@ -30,7 +31,8 @@ export function Autocomplete({
   className = '',
   emptyMessage = 'No se encontraron resultados',
   onCreateNew,
-  createNewLabel = '+ Crear nuevo'
+  createNewLabel = '+ Crear nuevo',
+  id
 }: AutocompleteProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -138,6 +140,7 @@ export function Autocomplete({
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         disabled={disabled}
+        id={id}
         className={`w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 ${className}`}
         autoComplete="off"
       />
@@ -155,11 +158,10 @@ export function Autocomplete({
             filteredOptions.map((option, index) => (
               <div
                 key={option.id}
-                className={`px-4 py-2 cursor-pointer text-sm ${
-                  index === highlightedIndex
+                className={`px-4 py-2 cursor-pointer text-sm ${index === highlightedIndex
                     ? 'bg-blue-50 text-blue-900'
                     : 'text-gray-900 hover:bg-gray-50'
-                } ${option.id === value ? 'font-semibold' : ''}`}
+                  } ${option.id === value ? 'font-semibold' : ''}`}
                 onClick={() => handleSelect(option.id)}
                 onMouseEnter={() => setHighlightedIndex(index)}
               >
@@ -177,9 +179,8 @@ export function Autocomplete({
                 <div className="border-t border-gray-200" />
               )}
               <div
-                className={`px-4 py-2 cursor-pointer text-sm text-blue-600 hover:bg-blue-50 ${
-                  highlightedIndex === filteredOptions.length ? 'bg-blue-50' : ''
-                }`}
+                className={`px-4 py-2 cursor-pointer text-sm text-blue-600 hover:bg-blue-50 ${highlightedIndex === filteredOptions.length ? 'bg-blue-50' : ''
+                  }`}
                 onClick={handleCreateNew}
                 onMouseEnter={() => setHighlightedIndex(filteredOptions.length)}
               >

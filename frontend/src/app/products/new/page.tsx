@@ -326,7 +326,7 @@ export default function NewProductPage() {
         if (element) {
           element.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
-        document.getElementById('purchaseUOMAutocomplete')?.focus();
+        document.getElementById('purchaseUOMAutocompleteInput')?.focus();
       }, 100);
       return;
     }
@@ -364,7 +364,7 @@ export default function NewProductPage() {
         if (element) {
           element.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
-        document.getElementById('purchaseUOMAutocomplete')?.focus();
+        document.getElementById('purchaseUOMAutocompleteInput')?.focus();
       }, 100);
       return;
     }
@@ -392,7 +392,7 @@ export default function NewProductPage() {
 
     // Recuperar foco para seguir agregando
     setTimeout(() => {
-      document.getElementById('purchaseUOMAutocomplete')?.focus();
+      document.getElementById('purchaseUOMAutocompleteInput')?.focus();
     }, 100);
   };
 
@@ -427,7 +427,7 @@ export default function NewProductPage() {
         if (element) {
           element.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
-        document.getElementById('saleUOMAutocomplete')?.focus();
+        document.getElementById('saleUOMAutocompleteInput')?.focus();
       }, 100);
       return;
     }
@@ -494,7 +494,7 @@ export default function NewProductPage() {
         if (element) {
           element.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
-        document.getElementById('saleUOMAutocomplete')?.focus();
+        document.getElementById('saleUOMAutocompleteInput')?.focus();
       }, 100);
       return;
     }
@@ -530,7 +530,7 @@ export default function NewProductPage() {
 
     // Recuperar foco para seguir agregando
     setTimeout(() => {
-      document.getElementById('saleUOMAutocomplete')?.focus();
+      document.getElementById('saleUOMAutocompleteInput')?.focus();
     }, 100);
   };
 
@@ -933,6 +933,7 @@ export default function NewProductPage() {
                       </label>
                       <div id="purchaseUOMAutocomplete">
                         <Autocomplete
+                          id="purchaseUOMAutocompleteInput"
                           options={uoms?.map(uom => ({ id: uom.id, code: uom.code, name: uom.name })) || []}
                           value={currentPurchaseUOM.uomId}
                           onChange={(value) => {
@@ -1129,6 +1130,7 @@ export default function NewProductPage() {
                       </label>
                       <div id="saleUOMAutocomplete">
                         <Autocomplete
+                          id="saleUOMAutocompleteInput"
                           options={uoms?.map(uom => ({ id: uom.id, code: uom.code, name: uom.name })) || []}
                           value={currentSaleUOM.uomId}
                           onChange={(value) => {

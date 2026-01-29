@@ -34,6 +34,7 @@ public class ProductDbContext : DbContext
             entity.Property(e => e.SalePrice).HasPrecision(18, 2);
             entity.Property(e => e.WholesalePrice).HasPrecision(18, 2);
             entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.PurchaseConversionMethod).HasMaxLength(20).IsRequired().HasDefaultValue("base");
 
             entity.HasMany(e => e.UOMConversions)
                   .WithOne(c => c.Product)

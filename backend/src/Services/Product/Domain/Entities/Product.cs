@@ -18,6 +18,7 @@ public class Product : BaseEntity
     public bool IsActive { get; private set; }
     public Guid BaseUOMId { get; private set; }
     public bool AllowFractional { get; private set; }
+    public string PurchaseConversionMethod { get; private set; } = "base"; // "base" or "previous"
 
     public string? ShortScanCode { get; private set; } // Optional short code for POS scanning
 
@@ -30,7 +31,7 @@ public class Product : BaseEntity
     public Product(string code, string name, string description, Guid categoryId,
                   decimal purchasePrice, decimal salePrice, decimal wholesalePrice, string tenantId,
                   Guid? baseUOMId = null, string? barcode = null, bool allowFractional = false, 
-                  string? categoryName = null, string? shortScanCode = null)
+                  string? categoryName = null, string? shortScanCode = null, string? purchaseConversionMethod = "base")
     {
         Code = code;  // Will be auto-generated in service if empty
         Barcode = barcode;
@@ -46,6 +47,7 @@ public class Product : BaseEntity
         // Default to Guid.Empty if not provided - will be updated after UOM seeding
         BaseUOMId = baseUOMId ?? Guid.Empty;
         AllowFractional = allowFractional;
+        PurchaseConversionMethod = purchaseConversionMethod ?? "base";
         IsActive = true;
     }
 
@@ -66,12 +68,16 @@ public class Product : BaseEntity
         ShortScanCode = shortScanCode;
     }
 
-    public void Update(string name, string description, Guid categoryId, string? categoryName = null)
+    public void Update(string name, string description, Guid categoryId, string? categoryName = null, string? purchaseConversionMethod = null)
     {
         Name = name;
         Description = description;
         CategoryId = categoryId;
         CategoryName = categoryName;
+        if (purchaseConversionMethod != null)
+        {
+            PurchaseConversionMethod = purchaseConversionMethod;
+        }
     }
 
     public void UpdatePrices(decimal purchasePrice, decimal salePrice, decimal wholesalePrice)

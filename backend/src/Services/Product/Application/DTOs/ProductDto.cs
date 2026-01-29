@@ -18,6 +18,7 @@ public record ProductDto
     public string? BaseUOMCode { get; set; }
     public string? BaseUOMName { get; set; }
     public bool AllowFractional { get; init; }
+    public string? PurchaseConversionMethod { get; init; }
     public decimal? UnitCost { get; set; }
     public int? CurrentStock { get; set; }
     public int? MinimumStock { get; set; }
@@ -45,6 +46,7 @@ public record CreateProductRequest
     public decimal WholesalePrice { get; init; }
     public Guid? BaseUOMId { get; init; }
     public bool AllowFractional { get; init; }
+    public string? PurchaseConversionMethod { get; init; }
     public List<CreateProductPurchaseUOMRequest> PurchaseUOMs { get; init; } = new();
     public List<CreateProductSaleUOMRequest> SaleUOMs { get; init; } = new();
 }
@@ -60,6 +62,7 @@ public record UpdateProductRequest
     public Guid CategoryId { get; init; }
     public Guid BaseUOMId { get; init; }
     public bool AllowFractional { get; init; }
+    public string? PurchaseConversionMethod { get; init; }
     public decimal PurchasePrice { get; init; }
     public decimal SalePrice { get; init; }
     public decimal WholesalePrice { get; init; }
