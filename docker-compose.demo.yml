@@ -107,6 +107,9 @@ services:
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=postgres-demo;Database=profitzen_demo;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
       - Services__ApiKey=${SERVICE_KEY}
+      - Services__MasterData__Url=http://configuration-service-demo:8080
+      - Services__Inventory__Url=http://inventory-service-demo:8080
+      - Services__Identity__Url=http://identity-service-demo:8080
       - Serilog__WriteTo__2__Args__serverUrl=http://seq-demo:5341
     depends_on:
       - postgres-demo
