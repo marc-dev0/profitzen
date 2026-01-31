@@ -14,15 +14,18 @@ public class ProductsController : ControllerBase
     private readonly IProductService _productService;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
+    private readonly ILogger<ProductsController> _logger;
 
     public ProductsController(
         IProductService productService,
         IHttpClientFactory httpClientFactory,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        ILogger<ProductsController> _logger)
     {
         _productService = productService;
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
+        this._logger = _logger;
     }
 
     private Guid GetCurrentUserId()
@@ -120,13 +123,13 @@ public class ProductsController : ControllerBase
             if (!response.IsSuccessStatusCode)
             {
                 // Log el error pero no fallar la creación del producto
-                Console.WriteLine($"Warning: Failed to initialize inventory for product {product.Id}");
+                _logger.LogWarning("Failed to initialize inventory for product {ProductId}. Status: {StatusCode}", product.Id, response.StatusCode);
             }
         }
         catch (Exception ex)
         {
             // Log el error pero no fallar la creación del producto
-            Console.WriteLine($"Warning: Exception initializing inventory: {ex.Message}");
+            _logger.LogError(ex, "Exception initializing inventory for product {ProductId}", product.Id);
         }
 
         return CreatedAtAction(nameof(GetProduct), new { id = product.Id }, product);

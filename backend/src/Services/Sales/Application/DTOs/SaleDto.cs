@@ -127,7 +127,8 @@ public record TopProductDto(
     string ProductCode,
     string ProductName,
     int TotalSold,
-    decimal TotalRevenue
+    decimal TotalRevenue,
+    string? UnitOfMeasure = null
 );
 
 public record DailySalesDto(

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { toast } from 'sonner';
 import AppLayout from '@/components/layout/AppLayout';
+import { DataTable, Column } from '@/components/DataTable';
 import {
     TrendingUp,
     Calendar,
@@ -14,7 +15,9 @@ import {
     ArrowDown,
     Download,
     FileText,
-    BarChart3
+    BarChart3,
+    BrainCircuit,
+    Sparkles
 } from 'lucide-react';
 import {
     LineChart,
@@ -34,35 +37,47 @@ import autoTable from 'jspdf-autotable';
 
 interface DailySale {
     date: string;
-    total: number;
-    count: number;
+    totalRevenue: number;
+    totalSales: number;
 }
 
 interface PaymentMethodStat {
-    method: string;
-    total: number;
-    count: number;
+    paymentMethod: string;
+    totalAmount: number;
+    transactionCount: number;
     [key: string]: any;
 }
 
 interface TopProduct {
+    rank?: number;
     productName: string;
-    quantity: number;
-    revenue: number;
+    totalSold: number;
+    totalRevenue: number;
+    unitOfMeasure?: string;
 }
+
+interface GroupedTopProduct extends TopProduct {
+    variants: TopProduct[];
+    totalGroupRevenue: number;
+    percentage?: number;
+}
+
+
+
+
 
 interface AnalyticsData {
     todayRevenue: number;
     yesterdayRevenue: number;
-    revenueGrowth: number;
+    revenueGrowthPercentage: number;
     todaySalesCount: number;
     yesterdaySalesCount: number;
     weekRevenue: number;
     lastWeekRevenue: number;
-    weekGrowth: number;
+    weekGrowthPercentage: number;
     monthRevenue: number;
     lastMonthRevenue: number;
-    monthGrowth: number;
+    monthGrowthPercentage: number;
     averageTicket: number;
     lastMonthAverageTicket: number;
     topProducts: TopProduct[];
@@ -83,6 +98,7 @@ const paymentMethodLabels: { [key: string]: string } = {
 export default function AnalyticsPage() {
     const router = useRouter();
     const [data, setData] = useState<AnalyticsData | null>(null);
+    const [groupedTopProducts, setGroupedTopProducts] = useState<GroupedTopProduct[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -99,17 +115,66 @@ export default function AnalyticsPage() {
             console.log('=== ANALYTICS DATA DEBUG ===');
             console.log('Full response:', response);
             console.log('Response data:', response.data);
-            console.log('Data keys:', Object.keys(response.data || {}));
-            console.log('todayRevenue:', response.data?.todayRevenue);
-            console.log('topProducts:', response.data?.topProducts);
-            console.log('last30Days:', response.data?.last30Days);
-            console.log('salesByPaymentMethod:', response.data?.salesByPaymentMethod);
-            console.log('=== END DEBUG ===');
-            setData(response.data);
+
+            const analyticsData: AnalyticsData = response.data;
+            setData(analyticsData);
+
+            // Grouping Logic
+            const groups: { [key: string]: GroupedTopProduct } = {};
+            analyticsData.topProducts.forEach((product) => {
+                const name = product.productName;
+                if (!groups[name]) {
+                    groups[name] = {
+                        ...product,
+                        totalSold: 0, // We will just display 'Varies' or sum if units match, but simpler to sum just revenue
+                        totalRevenue: 0,
+                        totalGroupRevenue: 0,
+                        variants: []
+                    };
+                }
+                groups[name].variants.push(product);
+                groups[name].totalRevenue += product.totalRevenue;
+                groups[name].totalGroupRevenue += product.totalRevenue;
+                // Sum quantity only if unit is same? For now let's just keep variants.
+            });
+
+            // Convert to array and sort by revenue
+            // Convert to array and sort by revenue
+            const groupedList = Object.values(groups).sort((a, b) => b.totalGroupRevenue - a.totalGroupRevenue);
+
+            // Calculate total revenue from the grouped list (which should match the raw sum)
+            const totalGroupedRevenue = groupedList.reduce((sum, p) => sum + p.totalGroupRevenue, 0);
+
+            // Calculate initial percentages and assign ranks
+            let currentSum = 0;
+            const tempProductsWithPct = groupedList.map((p, index) => {
+                p.rank = index + 1;
+                // Calculate raw percentage
+                let pct = totalGroupedRevenue > 0 ? (p.totalGroupRevenue / totalGroupedRevenue) * 100 : 0;
+                // Parse to fixed 2 decimals to simulate what we display, but keep as number
+                pct = parseFloat(pct.toFixed(2));
+                return { ...p, percentage: pct };
+            });
+
+            // Adjust rounding errors to ensure EXACTLY 100.00%
+            // We sum the rounded values. It might be 99.99 or 100.01.
+            const sumOfRounded = tempProductsWithPct.reduce((sum, p) => sum + (p.percentage || 0), 0);
+            const diff = 100 - sumOfRounded;
+
+            // If there is a difference (e.g. 0.01), add it to the first (largest) item.
+            // Using a small epsilon for float comparison safety
+            if (Math.abs(diff) > 0.001 && tempProductsWithPct.length > 0) {
+                if (tempProductsWithPct[0].percentage !== undefined) {
+                    tempProductsWithPct[0].percentage += diff;
+                    // Ensure javascript didn't introduce long float tails again
+                    tempProductsWithPct[0].percentage = parseFloat(tempProductsWithPct[0].percentage.toFixed(2));
+                }
+            }
+
+            setGroupedTopProducts(tempProductsWithPct);
+
         } catch (error: any) {
             console.error('Error fetching analytics:', error);
-            console.error('Error response:', error.response?.data);
-            console.error('Error status:', error.response?.status);
             toast.error('Error al cargar las estadísticas');
         } finally {
             setLoading(false);
@@ -162,9 +227,9 @@ export default function AnalyticsPage() {
 
         const summaryData = [
             ['Métrica', 'Valor', 'Variación'],
-            ['Ventas Hoy', formatCurrency(data.todayRevenue), `${data.revenueGrowth.toFixed(1)}%`],
-            ['Ventas Semana', formatCurrency(data.weekRevenue), `${data.weekGrowth.toFixed(1)}%`],
-            ['Ventas Mes', formatCurrency(data.monthRevenue), `${data.monthGrowth.toFixed(1)}%`],
+            ['Ventas Hoy', formatCurrency(data.todayRevenue), `${data.revenueGrowthPercentage.toFixed(1)}%`],
+            ['Ventas Semana', formatCurrency(data.weekRevenue), `${data.weekGrowthPercentage.toFixed(1)}%`],
+            ['Ventas Mes', formatCurrency(data.monthRevenue), `${data.monthGrowthPercentage.toFixed(1)}%`],
             ['Ticket Promedio', formatCurrency(data.averageTicket), '-'],
             ['Ventas Hoy (Cant.)', data.todaySalesCount.toString(), '-']
         ];
@@ -186,8 +251,8 @@ export default function AnalyticsPage() {
         const productsData = data.topProducts.map((p, i) => [
             (i + 1).toString(),
             p.productName,
-            p.quantity.toString(),
-            formatCurrency(p.revenue)
+            p.totalSold.toString(),
+            formatCurrency(p.totalRevenue)
         ]);
 
         autoTable(doc, {
@@ -205,9 +270,9 @@ export default function AnalyticsPage() {
         doc.text('Ventas por Método de Pago', 14, 20);
 
         const paymentData = data.salesByPaymentMethod.map(p => [
-            paymentMethodLabels[p.method] || p.method,
-            p.count.toString(),
-            formatCurrency(p.total)
+            paymentMethodLabels[p.paymentMethod] || p.paymentMethod,
+            p.transactionCount.toString(),
+            formatCurrency(p.totalAmount)
         ]);
 
         autoTable(doc, {
@@ -234,6 +299,134 @@ export default function AnalyticsPage() {
 
         doc.save(`reporte-ventas-${new Date().toISOString().split('T')[0]}.pdf`);
         toast.success('Reporte PDF generado correctamente');
+    };
+
+    // Calculate total revenue for percentages
+    const totalTopProductsRevenue = data?.topProducts.reduce((sum, p) => sum + p.totalRevenue, 0) || 0;
+
+    const topProductColumns: Column<GroupedTopProduct>[] = [
+        {
+            key: 'rank',
+            header: '#',
+            render: (product) => {
+                // We can use the rank from backend if available, or just render it. 
+                // Backend sends 'Rank' in TopProductDto? Let's assume we map it or it comes as 'rank' (since JSON usually camelCases).
+                // If 'rank' is not in API response, we might need to rely on index in full list, but DataTable paginates...
+                // However, the backend DOES send 'Rank' (seen in SaleDto.cs). Let's use it.
+                // If for some reason it's missing, we fall back to '-' 
+                const r = product.rank || 0;
+                let bgClass = 'bg-slate-300';
+                if (r === 1) bgClass = 'bg-yellow-500';
+                else if (r === 2) bgClass = 'bg-slate-400';
+                else if (r === 3) bgClass = 'bg-orange-600';
+
+                return (
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-white ${bgClass}`}>
+                        {r}
+                    </div>
+                );
+            }
+        },
+        {
+            key: 'productName',
+            header: 'PRODUCTO',
+            render: (product) => (
+                <div>
+                    <span className="font-medium text-foreground">{product.productName}</span>
+                    {product.variants.length > 1 && (
+                        <span className="text-xs text-muted-foreground block">{product.variants.length} presentaciones</span>
+                    )}
+                </div>
+            ),
+            footer: <span className="font-bold text-foreground">TOTAL</span>
+        },
+        {
+            key: 'totalSold',
+            header: 'CANTIDAD',
+            className: 'text-right',
+            render: (product) => {
+                // If only 1 variant, show it. If multiple, show "Ver detalle" or sum if possible?
+                if (product.variants.length === 1) {
+                    return (
+                        <span className="font-medium text-foreground">
+                            {product.variants[0].totalSold} {product.variants[0].unitOfMeasure || 'UNID'}
+                        </span>
+                    );
+                }
+                return <span className="text-sm text-muted-foreground italic">Ver detalle</span>;
+            }
+        },
+        {
+            key: 'totalRevenue',
+            header: 'INGRESOS TOTALES',
+            className: 'text-right',
+            render: (product) => <span className="font-semibold text-foreground">{formatCurrency(product.totalGroupRevenue)}</span>,
+            footer: (data) => {
+                const total = data.reduce((sum, p) => sum + p.totalGroupRevenue, 0);
+                return <span className="font-bold text-foreground">{formatCurrency(total)}</span>;
+            }
+        },
+        {
+            key: 'percentage', // Virtual key
+            header: '% INGRESOS',
+            className: 'text-right',
+            render: (product) => {
+                const percentage = product.percentage ?? (totalTopProductsRevenue > 0 ? (product.totalGroupRevenue / totalTopProductsRevenue) * 100 : 0);
+                return (
+                    <div className="flex items-center justify-end gap-2">
+                        <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
+                            <div
+                                className="h-full bg-blue-600 rounded-full"
+                                style={{ width: `${percentage}%` }}
+                            />
+                        </div>
+                        <span className="text-sm text-muted-foreground w-12 text-right">
+                            {percentage.toFixed(2)}%
+                        </span>
+                    </div>
+                );
+            },
+            footer: (data) => {
+                const totalPct = data.reduce((sum, p) => sum + (p.percentage || 0), 0);
+                return <span className="font-semibold text-foreground text-sm">{totalPct.toFixed(2)}%</span>;
+            }
+        }
+    ];
+
+    const renderTopProductDetail = (product: GroupedTopProduct) => {
+        return (
+            <div className="py-2">
+                <p className="text-sm font-semibold mb-2 text-primary">Detalle por Unidad de Medida:</p>
+                <div className="bg-background rounded border border-border overflow-hidden">
+                    <table className="w-full text-sm">
+                        <thead className="bg-muted text-muted-foreground">
+                            <tr>
+                                <th className="px-4 py-2 text-left">Unidad</th>
+                                <th className="px-4 py-2 text-right">Cantidad</th>
+                                <th className="px-4 py-2 text-right">Precio Prom.</th>
+                                <th className="px-4 py-2 text-right">Ingresos</th>
+                                <th className="px-4 py-2 text-right">% del Producto</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                            {product.variants.map((variant, idx) => {
+                                const percent = product.totalGroupRevenue > 0 ? (variant.totalRevenue / product.totalGroupRevenue) * 100 : 0;
+                                const avgPrice = variant.totalSold > 0 ? variant.totalRevenue / variant.totalSold : 0;
+                                return (
+                                    <tr key={idx} className="hover:bg-muted/30">
+                                        <td className="px-4 py-2 font-medium">{variant.unitOfMeasure || 'UNID'}</td>
+                                        <td className="px-4 py-2 text-right">{variant.totalSold}</td>
+                                        <td className="px-4 py-2 text-right">{formatCurrency(avgPrice)}</td>
+                                        <td className="px-4 py-2 text-right font-semibold">{formatCurrency(variant.totalRevenue)}</td>
+                                        <td className="px-4 py-2 text-right text-muted-foreground">{percent.toFixed(2)}%</td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        );
     };
 
     if (loading) {
@@ -268,14 +461,27 @@ export default function AnalyticsPage() {
         );
     }
 
+
+
     return (
         <AppLayout>
+            {/* ... existing headers and charts ... */}
+
             <div className="flex items-center justify-between mb-8">
                 <div>
                     <h1 className="text-3xl font-bold text-foreground">Dashboard de Ventas</h1>
                     <p className="text-muted-foreground mt-1">Análisis y tendencias de tu negocio</p>
                 </div>
+                {/* ... existing buttons ... */}
                 <div className="flex gap-3">
+                    <button
+                        onClick={() => router.push('/analytics/ia')}
+                        className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:shadow-purple-500/30 transition-all font-medium shadow-lg flex items-center gap-2"
+                    >
+                        <BrainCircuit className="w-5 h-5" />
+                        Analizador IA
+                        <Sparkles className="w-3 h-3 text-yellow-300" />
+                    </button>
                     <button
                         onClick={generatePDFReport}
                         className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium shadow-lg shadow-red-600/30 flex items-center gap-2"
@@ -300,15 +506,15 @@ export default function AnalyticsPage() {
                         <div className="w-12 h-12 rounded-lg bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
                             <DollarSign className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                         </div>
-                        {data.revenueGrowth >= 0 ? (
+                        {data.revenueGrowthPercentage >= 0 ? (
                             <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
                                 <ArrowUp className="w-4 h-4" />
-                                <span className="text-sm font-medium">{data.revenueGrowth.toFixed(1)}%</span>
+                                <span className="text-sm font-medium">{data.revenueGrowthPercentage.toFixed(1)}%</span>
                             </div>
                         ) : (
                             <div className="flex items-center gap-1 text-red-600 dark:text-red-400">
                                 <ArrowDown className="w-4 h-4" />
-                                <span className="text-sm font-medium">{Math.abs(data.revenueGrowth).toFixed(1)}%</span>
+                                <span className="text-sm font-medium">{Math.abs(data.revenueGrowthPercentage).toFixed(1)}%</span>
                             </div>
                         )}
                     </div>
@@ -323,15 +529,15 @@ export default function AnalyticsPage() {
                         <div className="w-12 h-12 rounded-lg bg-green-100 dark:bg-green-900/20 flex items-center justify-center">
                             <TrendingUp className="w-6 h-6 text-green-600 dark:text-green-400" />
                         </div>
-                        {data.weekGrowth >= 0 ? (
+                        {data.weekGrowthPercentage >= 0 ? (
                             <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
                                 <ArrowUp className="w-4 h-4" />
-                                <span className="text-sm font-medium">{data.weekGrowth.toFixed(1)}%</span>
+                                <span className="text-sm font-medium">{data.weekGrowthPercentage.toFixed(1)}%</span>
                             </div>
                         ) : (
                             <div className="flex items-center gap-1 text-red-600 dark:text-red-400">
                                 <ArrowDown className="w-4 h-4" />
-                                <span className="text-sm font-medium">{Math.abs(data.weekGrowth).toFixed(1)}%</span>
+                                <span className="text-sm font-medium">{Math.abs(data.weekGrowthPercentage).toFixed(1)}%</span>
                             </div>
                         )}
                     </div>
@@ -346,15 +552,15 @@ export default function AnalyticsPage() {
                         <div className="w-12 h-12 rounded-lg bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center">
                             <Calendar className="w-6 h-6 text-purple-600 dark:text-purple-400" />
                         </div>
-                        {data.monthGrowth >= 0 ? (
+                        {data.monthGrowthPercentage >= 0 ? (
                             <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
                                 <ArrowUp className="w-4 h-4" />
-                                <span className="text-sm font-medium">{data.monthGrowth.toFixed(1)}%</span>
+                                <span className="text-sm font-medium">{data.monthGrowthPercentage.toFixed(1)}%</span>
                             </div>
                         ) : (
                             <div className="flex items-center gap-1 text-red-600 dark:text-red-400">
                                 <ArrowDown className="w-4 h-4" />
-                                <span className="text-sm font-medium">{Math.abs(data.monthGrowth).toFixed(1)}%</span>
+                                <span className="text-sm font-medium">{Math.abs(data.monthGrowthPercentage).toFixed(1)}%</span>
                             </div>
                         )}
                     </div>
@@ -413,7 +619,7 @@ export default function AnalyticsPage() {
                             <Legend />
                             <Line
                                 type="monotone"
-                                dataKey="total"
+                                dataKey="totalRevenue"
                                 stroke="hsl(var(--primary))"
                                 strokeWidth={2}
                                 name="Ventas"
@@ -434,14 +640,16 @@ export default function AnalyticsPage() {
                                 cx="50%"
                                 cy="50%"
                                 labelLine={false}
+                                nameKey="paymentMethod"
                                 label={(entry: any) => {
-                                    const method = entry.method || '';
                                     const percent = entry.percent || 0;
+                                    if (percent < 0.05) return '';
+                                    const method = entry.payload.paymentMethod || '';
                                     return `${paymentMethodLabels[method] || method} ${(percent * 100).toFixed(0)}%`;
                                 }}
                                 outerRadius={100}
                                 fill="#8884d8"
-                                dataKey="total"
+                                dataKey="totalAmount"
                             >
                                 {data.salesByPaymentMethod.map((entry, index) => (
                                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -453,66 +661,20 @@ export default function AnalyticsPage() {
                 </div>
             </div>
 
-            {/* Top Products Table */}
-            <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
-                <div className="px-6 py-4 border-b border-border">
-                    <h2 className="text-lg font-bold text-foreground">Top 10 Productos Más Vendidos</h2>
+            {/* Top Products Table using DataTable */}
+            <div className="mt-8">
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-lg font-bold text-foreground">Productos Más Vendidos (Agrupado)</h2>
                 </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead className="bg-muted">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">#</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Producto</th>
-                                <th className="px-6 py-3 text-right text-xs font-semibold text-muted-foreground uppercase">Cantidad</th>
-                                <th className="px-6 py-3 text-right text-xs font-semibold text-muted-foreground uppercase">Ingresos</th>
-                                <th className="px-6 py-3 text-right text-xs font-semibold text-muted-foreground uppercase">% del Total</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border">
-                            {data.topProducts.map((product, index) => {
-                                const totalRevenue = data.topProducts.reduce((sum, p) => sum + p.revenue, 0);
-                                const percentage = (product.revenue / totalRevenue) * 100;
-
-                                return (
-                                    <tr key={index} className="hover:bg-muted/50 transition-colors">
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-white ${index === 0 ? 'bg-yellow-500' :
-                                                index === 1 ? 'bg-slate-400' :
-                                                    index === 2 ? 'bg-orange-600' :
-                                                        'bg-slate-300'
-                                                }`}>
-                                                {index + 1}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <p className="font-medium text-foreground">{product.productName}</p>
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <span className="font-medium text-foreground">{product.quantity}</span>
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <span className="font-semibold text-foreground">{formatCurrency(product.revenue)}</span>
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
-                                                    <div
-                                                        className="h-full bg-blue-600 rounded-full"
-                                                        style={{ width: `${percentage}%` }}
-                                                    />
-                                                </div>
-                                                <span className="text-sm text-muted-foreground w-12 text-right">
-                                                    {percentage.toFixed(1)}%
-                                                </span>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
+                <DataTable
+                    data={groupedTopProducts}
+                    columns={topProductColumns}
+                    keyExtractor={(item) => item.productName}
+                    defaultRowsPerPage={10}
+                    rowsPerPageOptions={[10, 20, 50]}
+                    emptyMessage="No hay productos vendidos en este periodo"
+                    renderDetail={renderTopProductDetail}
+                />
             </div>
         </AppLayout>
     );

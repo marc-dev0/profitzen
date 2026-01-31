@@ -118,6 +118,15 @@ public class AnalyticsController : ControllerBase
         return Ok(alerts);
     }
 
+    [HttpGet("inventory/insights")]
+    public async Task<IActionResult> GetInventoryInsights([FromQuery] bool refreshAi = false)
+    {
+        var tenantId = GetCurrentTenantId();
+        var storeId = GetCurrentStoreId();
+        var insights = await _analyticsService.GetInventoryInsightsAsync(tenantId, storeId, refreshAi);
+        return Ok(insights);
+    }
+
     [HttpPost("generate-summaries")]
     public async Task<IActionResult> GenerateSummaries()
     {
@@ -131,8 +140,6 @@ public class AnalyticsController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> GetDebugCounts([FromQuery] string? storeIdParam)
     {
-        // Allow passing storeId via query or get from token
-        // Use raw SQL to bypass any filters
          var tenantId = GetCurrentTenantId();
          var storeId = !string.IsNullOrEmpty(storeIdParam) ? Guid.Parse(storeIdParam) : GetCurrentStoreId();
 
@@ -144,7 +151,6 @@ public class AnalyticsController : ControllerBase
          {
              var cmd = connection.CreateCommand();
              
-             // Check Sales
              cmd.CommandText = $"SELECT COUNT(*) FROM sales.\"Sales\" WHERE \"TenantId\" = '{tenantId}'";
              result["TotalSalesInDB"] = await cmd.ExecuteScalarAsync();
 
@@ -154,21 +160,19 @@ public class AnalyticsController : ControllerBase
              cmd.CommandText = $"SELECT COUNT(*) FROM sales.\"Sales\" WHERE \"TenantId\" = '{tenantId}' AND \"StoreId\" = '{storeId}' AND \"Status\" = 2";
              result["CompletedSalesForStore"] = await cmd.ExecuteScalarAsync();
 
-             // Check Summaries
              cmd.CommandText = $"SELECT COUNT(*) FROM analytics.\"DailySalesSummaries\" WHERE \"TenantId\" = '{tenantId}'";
              result["TotalSummariesInDB"] = await cmd.ExecuteScalarAsync();
 
              cmd.CommandText = $"SELECT COUNT(*) FROM analytics.\"DailySalesSummaries\" WHERE \"TenantId\" = '{tenantId}' AND \"StoreId\" = '{storeId}'";
              result["SummariesForStore"] = await cmd.ExecuteScalarAsync();
 
-             // Check Dates
              cmd.CommandText = $"SELECT \"Date\" FROM analytics.\"DailySalesSummaries\" WHERE \"TenantId\" = '{tenantId}' AND \"StoreId\" = '{storeId}' ORDER BY \"Date\" DESC LIMIT 5";
              var dates = new List<string>();
              using (var reader = await cmd.ExecuteReaderAsync())
              {
                  while (await reader.ReadAsync())
                  {
-                     dates.Add(reader.GetDateTime(0).ToString("yyyy-MM-dd")); // Driver reads date as DateTime
+                     dates.Add(reader.GetDateTime(0).ToString("yyyy-MM-dd"));
                  }
              }
              result["RecentSummaryDates"] = dates;

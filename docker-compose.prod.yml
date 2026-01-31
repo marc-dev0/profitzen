@@ -36,6 +36,7 @@ services:
       - JwtSettings__Issuer=Profitzen.Identity
       - JwtSettings__Audience=Profitzen.Api
       - Services__ApiKey=${SERVICE_KEY}
+      - Serilog__WriteTo__2__Args__serverUrl=http://seq:5341
     depends_on:
       - postgres
     networks:
@@ -51,6 +52,7 @@ services:
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=profitzen;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
       - Services__ApiKey=${SERVICE_KEY}
+      - Serilog__WriteTo__2__Args__serverUrl=http://seq:5341
     depends_on:
       - postgres
     networks:
@@ -68,6 +70,7 @@ services:
       - Services__ApiKey=${SERVICE_KEY}
       - Services__ProductService__Url=http://product-service:8080
       - Services__MasterData__Url=http://configuration-service:8080
+      - Serilog__WriteTo__2__Args__serverUrl=http://seq:5341
     depends_on:
       - postgres
     networks:
@@ -83,6 +86,7 @@ services:
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=profitzen;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
       - Services__ApiKey=${SERVICE_KEY}
+      - Serilog__WriteTo__2__Args__serverUrl=http://seq:5341
     depends_on:
       - postgres
     networks:
@@ -98,6 +102,7 @@ services:
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=profitzen;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
       - Services__ApiKey=${SERVICE_KEY}
+      - Serilog__WriteTo__2__Args__serverUrl=http://seq:5341
     depends_on:
       - postgres
     networks:
@@ -116,6 +121,7 @@ services:
       - Services__Inventory__Url=http://inventory-service:8080
       - Services__ConfigurationUrl=http://configuration-service:8080
       - Services__ApiKey=${SERVICE_KEY}
+      - Serilog__WriteTo__2__Args__serverUrl=http://seq:5341
     depends_on:
       - postgres
     networks:
@@ -131,6 +137,8 @@ services:
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=profitzen;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
       - Services__ApiKey=${SERVICE_KEY}
+      - Serilog__WriteTo__2__Args__serverUrl=http://seq:5341
+      - AI__OllamaUrl=http://ollama:11434
     depends_on:
       - postgres
     networks:
@@ -164,9 +172,41 @@ services:
     networks:
       - profitzen-prod-network
 
+  ollama:
+    image: ollama/ollama:latest
+    restart: always
+    volumes:
+      - ollama_prod_data:/root/.ollama
+    networks:
+      - profitzen-prod-network
+
+  ollama-pull-model:
+    image: curlimages/curl
+    depends_on:
+      - ollama
+    networks:
+      - profitzen-prod-network
+    command: >
+      sh -c "sleep 10 && curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"llama3\"}'"
+
+  seq:
+    image: datalust/seq:latest
+    restart: always
+    environment:
+      - ACCEPT_EULA=Y
+      - SEQ_FIRSTRUN_ADMINPASSWORD=${SEQ_ADMIN_PASSWORD}
+    ports:
+      - "5341:5341"
+    volumes:
+      - seq_prod_data:/data
+    networks:
+      - profitzen-prod-network
+
 volumes:
   postgres_prod_data:
   redis_prod_data:
+  ollama_prod_data:
+  seq_prod_data:
 
 
 networks:

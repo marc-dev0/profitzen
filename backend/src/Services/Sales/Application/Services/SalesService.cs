@@ -733,7 +733,7 @@ public class SalesService : ISalesService
         // Growth percentage (today vs yesterday)
         var revenueGrowth = yesterdayRevenue > 0
             ? ((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100
-            : (todayRevenue > 0 ? 100 : 0);
+            : (todayRevenue > 0 ? 100m : 0m);
 
         // Week revenue (last 7 days including today)
         var weekRevenue = await completedSales
@@ -748,7 +748,7 @@ public class SalesService : ISalesService
         // Week growth percentage
         var weekGrowth = lastWeekRevenue > 0
             ? ((weekRevenue - lastWeekRevenue) / lastWeekRevenue) * 100
-            : (weekRevenue > 0 ? 100 : 0);
+            : (weekRevenue > 0 ? 100m : 0m);
 
         // Month revenue (current month)
         var monthRevenue = await completedSales
@@ -763,7 +763,7 @@ public class SalesService : ISalesService
         // Month growth percentage
         var monthGrowth = lastMonthRevenue > 0
             ? ((monthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100
-            : (monthRevenue > 0 ? 100 : 0);
+            : (monthRevenue > 0 ? 100m : 0m);
 
         // Average ticket (this month)
         var monthSalesCount = await completedSales
@@ -781,7 +781,7 @@ public class SalesService : ISalesService
         var topProducts = await completedSales
             .Where(s => s.SaleDate >= last30DaysStartUtc)
             .SelectMany(s => s.Items)
-            .GroupBy(i => new { i.ProductId, i.ProductCode, i.ProductName })
+            .GroupBy(i => new { i.ProductId, i.ProductCode, i.ProductName, i.UOMCode })
             .Select(g => new
             {
                 g.Key.ProductId,
@@ -790,10 +790,11 @@ public class SalesService : ISalesService
                     ? g.Key.ProductName.Substring(0, g.Key.ProductName.IndexOf(" ("))
                     : g.Key.ProductName,
                 TotalSold = g.Sum(i => i.Quantity),
-                TotalRevenue = g.Sum(i => i.Subtotal)
+                TotalRevenue = g.Sum(i => i.Subtotal),
+                UnitOfMeasure = g.Key.UOMCode ?? "UNID"
             })
             .OrderByDescending(x => x.TotalRevenue)
-            .Take(10)
+            .Take(100)
             .ToListAsync();
 
         var rankedTopProducts = topProducts.Select((p, index) => new TopProductDto(
@@ -802,7 +803,8 @@ public class SalesService : ISalesService
             p.ProductCode,
             p.ProductName,
             p.TotalSold,
-            p.TotalRevenue
+            p.TotalRevenue,
+            p.UnitOfMeasure
         )).ToList();
 
         // Last 30 days daily sales
@@ -812,6 +814,7 @@ public class SalesService : ISalesService
             .ToListAsync();
 
         // Group by LOCAL date
+        // Fix NaN issues by ensuring division by zero is handled
         var last30Days = salesLast30Days
             .GroupBy(s => s.SaleDate.Add(timeZoneOffset).Date)
             .Select(g => new DailySalesDto(
@@ -824,11 +827,12 @@ public class SalesService : ISalesService
 
         // Fill missing days with zero
         var allDays = new List<DailySalesDto>();
+        // Iterate including today
         for (var date = last30DaysStartUtc.Add(timeZoneOffset).Date; date <= todayLocal.Date; date = date.AddDays(1))
         {
             var existing = last30Days.FirstOrDefault(d => d.Date.Date == date.Date);
             var utcDate = DateTime.SpecifyKind(date, DateTimeKind.Utc);
-            allDays.Add(existing ?? new DailySalesDto(utcDate, 0, 0));
+            allDays.Add(existing ?? new DailySalesDto(utcDate, 0m, 0));
         }
 
         // Sales by payment method (this month)

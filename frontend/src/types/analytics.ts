@@ -80,3 +80,30 @@ export interface ProductPerformance {
   lastSaleDate: string;
   daysSinceLastSale: number;
 }
+
+export interface RiskAssessment {
+  productId: string;
+  productCode: string;
+  productName: string;
+  currentStock: number;
+  dailyConsumptionRate: number;
+  estimatedDaysRemaining: number;
+  riskLevel: 'Critical' | 'High' | 'Medium' | 'Low';
+  uomName?: string;
+}
+
+export interface SuggestedPurchase {
+  productId: string;
+  productCode: string;
+  productName: string;
+  quantityToOrder: number;
+  estimatedCost: number;
+  reason: string;
+}
+
+export interface InventoryInsightReport {
+  atRiskProducts: RiskAssessment[];
+  deadStock: ProductPerformance[];
+  purchaseRecommendations: SuggestedPurchase[];
+  aiSummary: string;
+}

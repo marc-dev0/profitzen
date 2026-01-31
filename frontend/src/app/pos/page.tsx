@@ -21,25 +21,11 @@ const printTicketFromBackend = async (
   }
 ) => {
   try {
-    const token = localStorage.getItem('token');
-
-    // Usar ruta relativa para que coincida con el origen del sitio (Nginx se encarga del resto)
-    const response = await fetch(`/api/sales/${saleId}/ticket`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(settings)
+    const response = await apiClient.post(`/api/sales/${saleId}/ticket`, settings, {
+      responseType: 'blob'
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Ticket generation failed:', errorText);
-      throw new Error(`Error generating ticket: ${response.status} ${response.statusText}`);
-    }
-
-    const blob = await response.blob();
+    const blob = response.data;
     const url = window.URL.createObjectURL(blob);
     const printWindow = window.open(url, '_blank');
 
@@ -137,6 +123,7 @@ export default function POSPage() {
   const processButtonRef = useRef<HTMLButtonElement>(null);
   const productRefs = useRef<(HTMLDivElement | null)[]>([]);
   const cartItemRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const quantityInputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const productsContainerRef = useRef<HTMLDivElement>(null);
 
   // Quick Create Customer State
@@ -334,7 +321,7 @@ export default function POSPage() {
           }
         }
 
-        if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (e.key === 'Delete' || (e.key === 'Backspace' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA')) {
           e.preventDefault();
           const item = cart[selectedCartIndex];
           if (item) {
@@ -408,7 +395,7 @@ export default function POSPage() {
     const conversionToBase = defaultUOM?.conversionToBase || 1;
 
     // STOCK CHECK START
-    // Calculate total base quantity already in cart for this product (excluding the specific item we are about to update/replace)
+    // Calculate total base quantity already in cart for this product
     const stockUsedByOthers = cart.reduce((acc, item, idx) => {
       if (item.productId === productId && idx !== existingItemIndex) {
         return acc + (item.quantity * item.conversionToBase);
@@ -420,11 +407,10 @@ export default function POSPage() {
     const totalStockNeeded = stockUsedByOthers + additionalStockNeeded;
     const currentStock = product.currentStock || 0;
 
-    // Check if stock is sufficient (only if tracking stock/stock > 0 check is desired)
-    // Assuming if stock is 0 and it's not a service (logic ambiguous), we block.
-    // Preserving original check "product.currentStock < stockNeeded" but using total.
+    // Check if stock is sufficient
     if (currentStock < totalStockNeeded) {
-      toast.warning(`Stock insuficiente. Stock físico: ${currentStock}. En carrito: ${stockUsedByOthers} base. Intentando agregar: ${additionalStockNeeded} base.`);
+      const availableInThisUOM = Math.floor(currentStock / conversionToBase);
+      toast.warning(`Stock insuficiente para ${product.name}. Disponible: ${availableInThisUOM} ${defaultUOM?.uomName || 'UND'}.`);
       return;
     }
     // STOCK CHECK END
@@ -452,19 +438,15 @@ export default function POSPage() {
       }]);
     }
 
-    if (!keepOpen) {
-      setSearchTerm('');
-      setFocusMode('search');
-      setShowProductGrid(false);
-      searchInputRef.current?.focus();
-    } else {
-      // If keeping open (mouse usage), ensure focus mode allows continuing
-      // But we probably want to keep visual focus on the item?
-      // For now, let's just NOT reset everything.
-      // Maybe refocus the product grid so arrows work?
-      // productsContainerRef.current?.focus(); 
-      // Actually, if we click, visual focus is on the item. HTML focus might be body.
-    }
+    // For efficiency, focus the quantity input of the added/updated item
+    const targetIndex = existingItemIndex !== -1 ? existingItemIndex : cart.length;
+    setFocusMode('cart');
+    setSelectedCartIndex(targetIndex);
+
+    setTimeout(() => {
+      quantityInputRefs.current[targetIndex]?.focus();
+      quantityInputRefs.current[targetIndex]?.select();
+    }, 100);
   };
 
   const updateCartItemUOM = (productId: string, currentUomId: string, newUomId: string) => {
@@ -514,10 +496,8 @@ export default function POSPage() {
   };
 
   const updateQuantity = (productId: string, uomId: string, newQuantity: number) => {
-    if (newQuantity <= 0) {
-      removeFromCart(productId, uomId);
-      return;
-    }
+    // We allow 0 quantity to support the "empty input" state in the UI
+    if (newQuantity < 0) return;
 
     const product = products?.find(p => p.id === productId);
     if (!product) return;
@@ -539,7 +519,8 @@ export default function POSPage() {
     const currentStock = product.currentStock || 0;
 
     if (currentStock < totalStockNeeded) {
-      toast.warning(`Stock insuficiente. Stock actual: ${currentStock}. Requerido total: ${totalStockNeeded}.`);
+      const availableInThisUOM = Math.floor((currentStock - stockUsedByOthers) / item.conversionToBase);
+      toast.warning(`Stock insuficiente. Solo quedan ${availableInThisUOM} ${item.uomName} disponibles.`);
       return;
     }
 
@@ -944,8 +925,11 @@ export default function POSPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {filteredProducts.map((product, index) => {
                         const stock = product.currentStock || 0;
-                        const isOutOfStock = stock === 0;
-                        const isLowStock = stock > 0 && stock <= (product.minimumStock || 10);
+                        const inCartBase = cart.filter(item => item.productId === product.id)
+                          .reduce((acc, item) => acc + (item.quantity * item.conversionToBase), 0);
+                        const effectiveStock = Math.max(0, stock - inCartBase);
+                        const isOutOfStock = effectiveStock <= 0;
+                        const isLowStock = effectiveStock > 0 && effectiveStock <= (product.minimumStock || 10);
                         const isSelected = focusMode === 'products' && index === selectedProductIndex;
 
                         return (
@@ -972,13 +956,26 @@ export default function POSPage() {
                                   {product.name}
                                 </p>
                                 <p className="text-sm text-muted-foreground mt-1">Código: {product.code}</p>
-                                <div className="flex items-center space-x-2 mt-1">
-                                  <p className={`text-xs ${isOutOfStock ? 'text-red-500 font-bold' : isLowStock ? 'text-orange-500 font-semibold' : 'text-muted-foreground'}`}>
-                                    Stock: {stock} unidades
+                                <div className="mt-1 space-y-0.5">
+                                  <p className={`text-xs font-bold ${isOutOfStock ? 'text-red-500' : isLowStock ? 'text-orange-500' : 'text-primary'}`}>
+                                    Stock Disponible:
                                   </p>
-                                  {isLowStock && !isOutOfStock && (
-                                    <span className="text-xs bg-orange-500/10 text-orange-500 px-2 py-0.5 rounded-full border border-orange-500/20">Stock Bajo</span>
-                                  )}
+                                  <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                                    {product.saleUOMs?.filter(uom => uom.isActive !== false).map(uom => {
+                                      const convertedStock = Math.floor(effectiveStock / (uom.conversionToBase || 1));
+                                      return (
+                                        <span key={uom.uomId} className="text-[10px] bg-muted px-1.5 py-0.5 rounded border border-border text-muted-foreground whitespace-nowrap">
+                                          {convertedStock} {uom.uomName}
+                                        </span>
+                                      );
+                                    })}
+                                    {/* Always show base units if not already shown */}
+                                    {product.saleUOMs?.every(uom => uom.conversionToBase !== 1) && (
+                                      <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded border border-border text-muted-foreground whitespace-nowrap">
+                                        {effectiveStock} UND (Base)
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                               <div className="text-right ml-4">
@@ -1139,12 +1136,38 @@ export default function POSPage() {
                                 −
                               </button>
                               <input
-                                type="number"
-                                min="1"
-                                value={item.quantity}
+                                ref={(el) => { quantityInputRefs.current[index] = el; }}
+                                type="text"
+                                inputMode="numeric"
+                                value={item.quantity === 0 ? '' : item.quantity}
                                 onChange={(e) => {
-                                  const val = parseInt(e.target.value) || 1;
-                                  updateQuantity(item.productId, item.uomId, val);
+                                  const val = e.target.value;
+                                  if (val === '') {
+                                    updateQuantity(item.productId, item.uomId, 0); // Temporary 0 for empty UI
+                                    return;
+                                  }
+                                  const parsed = parseInt(val);
+                                  if (!isNaN(parsed)) {
+                                    updateQuantity(item.productId, item.uomId, Math.max(0, parsed));
+                                  }
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    if (paymentMethod === 'Efectivo') {
+                                      setFocusMode('payment');
+                                      amountReceivedRef.current?.focus();
+                                      amountReceivedRef.current?.select();
+                                    } else {
+                                      setFocusMode('payment');
+                                      processButtonRef.current?.focus();
+                                    }
+                                  }
+                                }}
+                                onBlur={(e) => {
+                                  if (item.quantity <= 0) {
+                                    updateQuantity(item.productId, item.uomId, 1);
+                                  }
                                 }}
                                 onFocus={(e) => e.target.select()}
                                 className="w-14 text-center font-bold text-foreground border-0 focus:outline-none focus:ring-0 bg-transparent"

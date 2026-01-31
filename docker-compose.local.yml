@@ -25,7 +25,6 @@ services:
     networks:
       - profitzen-network
 
-
   identity-service:
     build:
       context: ./backend
@@ -42,8 +41,45 @@ services:
     networks:
       - profitzen-network
 
+  ollama:
+    image: ollama/ollama:latest
+    restart: always
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_local_data:/root/.ollama
+    networks:
+      - profitzen-network
+
+  ollama-pull-model:
+    image: curlimages/curl
+    container_name: profitzen-ollama-puller
+    depends_on:
+      - ollama
+    networks:
+      - profitzen-network
+    command: >
+      sh -c "sleep 10 && curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"llama3\"}'"
+
+  seq:
+    image: datalust/seq:latest
+    container_name: profitzen-seq
+    environment:
+      - ACCEPT_EULA=Y
+      - SEQ_FIRSTRUN_ADMINPASSWORD=admin_password_123
+    ports:
+      - "8081:80"
+      - "5341:5341"
+    networks:
+      - profitzen-network
+    volumes:
+      - seq_data:/data
+
 volumes:
   postgres_dev_data:
+  ollama_local_data:
+  seq_data:
+
 
 networks:
   profitzen-network:

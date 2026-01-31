@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown } from 'lucide-react';
 
 export interface Column<T> {
     key: string;
@@ -10,6 +10,7 @@ export interface Column<T> {
     className?: string;
     sortable?: boolean;
     sortKey?: string; // Key to use for sorting (if different from display key)
+    footer?: ReactNode | ((data: T[]) => ReactNode);
 }
 
 interface DataTableProps<T> {
@@ -28,6 +29,7 @@ interface DataTableProps<T> {
     initialSearchTerm?: string;
     onSelectionChange?: (selectedItems: T[]) => void;
     selectedItems?: T[];
+    renderDetail?: (item: T) => ReactNode;
 }
 
 export function DataTable<T>({
@@ -45,12 +47,14 @@ export function DataTable<T>({
     searchKeys = [],
     initialSearchTerm = '',
     onSelectionChange,
-    selectedItems = []
+    selectedItems = [],
+    renderDetail
 }: DataTableProps<T>) {
     const [currentPage, setCurrentPage] = useState(1);
     const [rowsPerPage, setRowsPerPage] = useState(defaultRowsPerPage);
     const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
     const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+    const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
     // Filter data based on search
     const filteredData = searchable && searchTerm
@@ -80,6 +84,19 @@ export function DataTable<T>({
     useEffect(() => {
         setCurrentPage(1);
     }, [sortedData.length, searchTerm]);
+
+    const toggleRow = (itemId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setExpandedRows(prev => {
+            const next = new Set(prev);
+            if (next.has(itemId)) {
+                next.delete(itemId);
+            } else {
+                next.add(itemId);
+            }
+            return next;
+        });
+    };
 
     // Pagination calculations
     const totalPages = Math.ceil(sortedData.length / rowsPerPage);
@@ -254,6 +271,7 @@ export function DataTable<T>({
                         <table className="w-full">
                             <thead className="bg-muted/50 border-b border-border">
                                 <tr>
+                                    {renderDetail && <th className="px-6 py-4 w-10"></th>}
                                     {onSelectionChange && (
                                         <th className="px-6 py-4 w-4">
                                             <input
@@ -291,39 +309,85 @@ export function DataTable<T>({
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border">
-                                {currentData.map((item) => (
-                                    <tr
-                                        key={keyExtractor(item)}
-                                        onClick={() => onRowClick?.(item)}
-                                        className={`hover:bg-muted/50 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
-                                    >
-                                        {onSelectionChange && (
-                                            <td className="px-6 py-4 whitespace-nowrap w-4">
-                                                <input
-                                                    type="checkbox"
-                                                    className="rounded border-gray-300 text-primary focus:ring-primary"
-                                                    checked={selectedItems.some(selected => keyExtractor(selected) === keyExtractor(item))}
-                                                    onChange={(e) => {
-                                                        e.stopPropagation();
-                                                        handleSelectItem(item, e.target.checked);
-                                                    }}
-                                                    onClick={(e) => e.stopPropagation()}
-                                                />
-                                            </td>
-                                        )}
-                                        {columns.map((column) => (
-                                            <td
-                                                key={column.key}
-                                                className={`px-6 py-4 whitespace-nowrap ${column.className || ''}`}
+                                {currentData.map((item) => {
+                                    const itemId = keyExtractor(item);
+                                    const isExpanded = expandedRows.has(itemId);
+
+                                    return (
+                                        <>
+                                            <tr
+                                                key={itemId}
+                                                onClick={() => onRowClick?.(item)}
+                                                className={`hover:bg-muted/50 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
                                             >
-                                                {column.render
-                                                    ? column.render(item)
-                                                    : (item as any)[column.key]}
+                                                {renderDetail && (
+                                                    <td className="px-6 py-4 whitespace-nowrap w-10">
+                                                        <button
+                                                            onClick={(e) => toggleRow(itemId, e)}
+                                                            className="p-1 hover:bg-muted rounded transition-colors"
+                                                        >
+                                                            {isExpanded ? (
+                                                                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                                                            ) : (
+                                                                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                                                            )}
+                                                        </button>
+                                                    </td>
+                                                )}
+                                                {onSelectionChange && (
+                                                    <td className="px-6 py-4 whitespace-nowrap w-4">
+                                                        <input
+                                                            type="checkbox"
+                                                            className="rounded border-gray-300 text-primary focus:ring-primary"
+                                                            checked={selectedItems.some(selected => keyExtractor(selected) === keyExtractor(item))}
+                                                            onChange={(e) => {
+                                                                e.stopPropagation();
+                                                                handleSelectItem(item, e.target.checked);
+                                                            }}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        />
+                                                    </td>
+                                                )}
+                                                {columns.map((column) => (
+                                                    <td
+                                                        key={column.key}
+                                                        className={`px-6 py-4 whitespace-nowrap ${column.className || ''}`}
+                                                    >
+                                                        {column.render
+                                                            ? column.render(item)
+                                                            : (item as any)[column.key]}
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                            {isExpanded && renderDetail && (
+                                                <tr key={`${itemId}-detail`} className="bg-muted/30">
+                                                    <td colSpan={columns.length + (onSelectionChange ? 1 : 0) + 1} className="px-6 py-4">
+                                                        <div className="pl-4 border-l-2 border-primary/20">
+                                                            {renderDetail(item)}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </>
+                                    );
+                                })}
+
+                            </tbody>
+                            {columns.some((col) => col.footer) && (
+                                <tfoot className="bg-muted/50 border-t border-border font-medium">
+                                    <tr>
+                                        {renderDetail && <td className="px-6 py-4"></td>}
+                                        {onSelectionChange && <td className="px-6 py-4"></td>}
+                                        {columns.map((column) => (
+                                            <td key={column.key} className={`px-6 py-4 whitespace-nowrap ${column.className || ''}`}>
+                                                {typeof column.footer === 'function'
+                                                    ? column.footer(filteredData)
+                                                    : column.footer}
                                             </td>
                                         ))}
                                     </tr>
-                                ))}
-                            </tbody>
+                                </tfoot>
+                            )}
                         </table>
                     </div>
 
@@ -390,7 +454,8 @@ export function DataTable<T>({
                         </div>
                     )}
                 </>
-            )}
-        </div>
+            )
+            }
+        </div >
     );
 }

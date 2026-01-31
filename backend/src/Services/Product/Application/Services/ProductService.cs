@@ -32,7 +32,7 @@ public class ProductService : IProductService
 
     public async Task<IEnumerable<ProductDto>> GetProductsAsync(string tenantId, Guid? storeId = null, bool includeStock = true)
     {
-        Console.WriteLine($"[DEBUG] GetProductsAsync called for tenant: {tenantId}, store: {storeId}");
+        _logger.LogDebug("GetProductsAsync called for tenant: {TenantId}, store: {StoreId}", tenantId, storeId);
         
         // Load entities first with all navigation properties
         var productEntities = await _context.Products
@@ -44,17 +44,17 @@ public class ProductService : IProductService
             .Where(p => p.TenantId == tenantId)
             .ToListAsync();
 
-        Console.WriteLine($"[DEBUG] Retrieved {productEntities.Count} product entities");
+        _logger.LogDebug("Retrieved {Count} product entities", productEntities.Count);
         
         // Debug: Check if PurchaseUOMs are loaded
         foreach(var entity in productEntities.Take(3))
         {
-            Console.WriteLine($"[DEBUG] Entity {entity.Name}: PurchaseUOMs count = {entity.PurchaseUOMs?.Count ?? 0}");
+            _logger.LogDebug("Entity {ProductName}: PurchaseUOMs count = {Count}", entity.Name, entity.PurchaseUOMs?.Count ?? 0);
             if (entity.PurchaseUOMs != null && entity.PurchaseUOMs.Any())
             {
                 foreach(var pu in entity.PurchaseUOMs)
                 {
-                    Console.WriteLine($"[DEBUG]   - UOM {pu.UOMId}, Conversion: {pu.ConversionToBase}, IsDefault: {pu.IsDefault}");
+                    _logger.LogDebug("  - UOM {UomId}, Conversion: {Conversion}, IsDefault: {IsDefault}", pu.UOMId, pu.ConversionToBase, pu.IsDefault);
                 }
             }
         }
@@ -125,18 +125,15 @@ public class ProductService : IProductService
             };
         }).ToList();
 
-        Console.WriteLine($"[DEBUG] Mapped to {products.Count} DTOs");
-
-        Console.WriteLine($"[DEBUG] Retrieved {products.Count} products");
+        _logger.LogDebug("Mapped to {Count} DTOs", products.Count);
+        _logger.LogDebug("Retrieved {Count} products", products.Count);
         
         // Log first few products with their UnitCost
         foreach(var product in products.Take(5)) {
-            Console.WriteLine($"[DEBUG] Product: {product.Name}");
-            Console.WriteLine($"[DEBUG]   - PurchasePrice: {product.PurchasePrice}");
-            Console.WriteLine($"[DEBUG]   - UnitCost: {product.UnitCost}");
+            _logger.LogDebug("Product: {ProductName}, PurchasePrice: {Price}, UnitCost: {UnitCost}", product.Name, product.PurchasePrice, product.UnitCost);
         }
         
-        Console.WriteLine($"[DEBUG] Now enriching...");
+        _logger.LogDebug("Now enriching...");
         await _enrichmentService.EnrichProductsAsync(products, tenantId, storeId);
         
         // Explicitly enrich with stock data using the robust internal endpoint
@@ -145,7 +142,7 @@ public class ProductService : IProductService
             await EnrichWithStockDataAsync(products, storeId.Value, tenantId);
         }
         
-        Console.WriteLine($"[DEBUG] Enrichment complete");
+        _logger.LogDebug("Enrichment complete");
 
         return products;
     }
@@ -321,9 +318,9 @@ public class ProductService : IProductService
         }).ToList();
         
         // Debug
-        Console.WriteLine($"[DEBUG] Search found {products.Count} products");
+        _logger.LogDebug("Search found {Count} products", products.Count);
         foreach(var p in products) {
-             Console.WriteLine($"[DEBUG] Search Result: {p.Name}, Price: {p.PurchasePrice}, UnitCost: {p.UnitCost}");
+             _logger.LogDebug("Search Result: {ProductName}, Price: {Price}, UnitCost: {UnitCost}", p.Name, p.PurchasePrice, p.UnitCost);
         }
 
         await _enrichmentService.EnrichProductsAsync(products, tenantId);

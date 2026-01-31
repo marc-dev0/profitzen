@@ -112,14 +112,34 @@ export default function ProductsPage() {
         const isOutOfStock = stock === 0;
 
         return (
-          <div className="flex items-center gap-2">
-            <span className={`text-sm font-semibold ${isOutOfStock ? 'text-red-500' :
-              isLowStock ? 'text-yellow-500' :
-                'text-foreground'
-              }`}>
-              {stock}
-            </span>
-            <span className="text-xs text-muted-foreground">UND</span>
+          <div className="flex flex-col gap-1.5 min-w-[120px]">
+            <div className="flex items-center gap-2">
+              <span className={`text-sm font-bold ${isOutOfStock ? 'text-red-500' :
+                isLowStock ? 'text-yellow-500' :
+                  'text-foreground'
+                }`}>
+                {stock}
+              </span>
+              <span className="text-[10px] text-muted-foreground font-medium px-1 bg-muted rounded border border-border/50 uppercase">UND (Base)</span>
+            </div>
+
+            {/* UOM Breakdown */}
+            {stock > 0 && product.saleUOMs && product.saleUOMs.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {product.saleUOMs
+                  .filter(uom => uom.conversionToBase > 1) // Only show composite units
+                  .sort((a, b) => b.conversionToBase - a.conversionToBase) // Biggest first
+                  .map(uom => {
+                    const convertedStock = Math.floor(stock / uom.conversionToBase);
+                    if (convertedStock === 0) return null;
+                    return (
+                      <span key={uom.uomId} className="text-[9px] bg-muted/50 px-1 py-0.5 rounded border border-border text-muted-foreground/80 whitespace-nowrap">
+                        {convertedStock} {uom.uomName}
+                      </span>
+                    );
+                  })}
+              </div>
+            )}
           </div>
         );
       }

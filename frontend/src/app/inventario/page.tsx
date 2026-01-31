@@ -88,7 +88,9 @@ export default function InventarioPage() {
                     productCode: product.code,
                     unitCost, // Use base unit cost
                     purchasePrice: (product as any).purchasePrice || 0,
-                    purchaseUOMName: (product as any).purchaseUOMName || 'Unidad'
+                    purchaseUOMName: (product as any).purchaseUOMName || 'Unidad',
+                    saleUOMs: product.saleUOMs, // Include UOM info for display
+                    purchaseUOMs: product.purchaseUOMs
                 };
             }
 
@@ -106,8 +108,10 @@ export default function InventarioPage() {
                 shortScanCode: (product as any).shortScanCode,
                 unitCost,
                 purchasePrice: (product as any).purchasePrice || 0,
-                purchaseUOMName: (product as any).purchaseUOMName || 'Unidad'
-            } as StoreInventoryItem;
+                purchaseUOMName: (product as any).purchaseUOMName || 'Unidad',
+                saleUOMs: product.saleUOMs,
+                purchaseUOMs: product.purchaseUOMs
+            } as any; // Using any because StoreInventoryItem might not have UOMs yet
         });
     }, [inventory, products, user?.currentStoreId]);
 
@@ -452,15 +456,38 @@ export default function InventarioPage() {
             key: 'currentStock',
             header: 'Stock Actual',
             sortable: true,
-            render: (item) => {
+            render: (item: any) => {
                 const isLow = item.currentStock <= item.minimumStock && item.currentStock > 0;
                 const isOut = item.currentStock === 0;
+                const stock = item.currentStock || 0;
+
                 return (
-                    <div className="flex items-center gap-2">
-                        <span className={`text-sm font-bold ${isOut ? 'text-red-600' : isLow ? 'text-yellow-600' : 'text-green-600'}`}>
-                            {item.currentStock}
-                        </span>
-                        {(isLow || isOut) && <AlertTriangle className="w-4 h-4 text-red-600" />}
+                    <div className="flex flex-col gap-1.5 min-w-[120px]">
+                        <div className="flex items-center gap-2">
+                            <span className={`text-sm font-bold ${isOut ? 'text-red-600' : isLow ? 'text-yellow-600' : 'text-green-600'}`}>
+                                {stock}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground font-medium px-1 bg-muted rounded border border-border/50 uppercase">UND (Base)</span>
+                            {(isLow || isOut) && <AlertTriangle className="w-4 h-4 text-red-600" />}
+                        </div>
+
+                        {/* UOM Breakdown */}
+                        {stock > 0 && item.saleUOMs && item.saleUOMs.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                                {item.saleUOMs
+                                    .filter((uom: any) => uom.conversionToBase > 1)
+                                    .sort((a: any, b: any) => b.conversionToBase - a.conversionToBase)
+                                    .map((uom: any) => {
+                                        const convertedStock = Math.floor(stock / uom.conversionToBase);
+                                        if (convertedStock === 0) return null;
+                                        return (
+                                            <span key={uom.uomId} className="text-[9px] bg-muted/50 px-1 py-0.5 rounded border border-border text-muted-foreground/80 whitespace-nowrap">
+                                                {convertedStock} {uom.uomName}
+                                            </span>
+                                        );
+                                    })}
+                            </div>
+                        )}
                     </div>
                 );
             }

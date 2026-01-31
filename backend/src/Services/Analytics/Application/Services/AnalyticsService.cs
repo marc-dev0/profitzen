@@ -3,16 +3,22 @@ using Profitzen.Analytics.Application.DTOs;
 using Profitzen.Analytics.Domain.Entities;
 using Profitzen.Analytics.Infrastructure;
 using System.Data;
+using Microsoft.SemanticKernel;
+using Microsoft.Extensions.Logging;
 
 namespace Profitzen.Analytics.Application.Services;
 
 public class AnalyticsService : IAnalyticsService
 {
     private readonly AnalyticsDbContext _context;
+    private readonly Kernel _kernel;
+    private readonly ILogger<AnalyticsService> _logger;
 
-    public AnalyticsService(AnalyticsDbContext context)
+    public AnalyticsService(AnalyticsDbContext context, Kernel kernel, ILogger<AnalyticsService> logger)
     {
         _context = context;
+        _kernel = kernel;
+        _logger = logger;
     }
 
     public async Task<DashboardDto> GetDashboardAsync(string tenantId, Guid storeId)
@@ -422,6 +428,161 @@ public class AnalyticsService : IAnalyticsService
         );
     }
 
+    public async Task<InventoryInsightReportDto> GetInventoryInsightsAsync(string tenantId, Guid storeId, bool generateAi = false)
+    {
+        await GenerateDailySummariesAsync(tenantId, storeId);
+
+        var connection = _context.Database.GetDbConnection();
+        var wasOpen = connection.State == System.Data.ConnectionState.Open;
+        if (!wasOpen) await connection.OpenAsync();
+
+        try 
+        {
+            var performance = await GetProductPerformanceAsync(tenantId);
+            
+            var atRisk = new List<RiskAssessmentDto>();
+            var suggestedPurchases = new List<SuggestedPurchaseDto>();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                SELECT 
+                    si.""ProductId"",
+                    si.""CurrentStock"",
+                    p.""PurchasePrice"",
+                    si.""MinimumStock"",
+                    NULL as ""BaseUOMName""
+                FROM inventory.""StoreInventories"" si
+                JOIN product.""products"" p ON si.""ProductId"" = p.""Id""
+                WHERE si.""TenantId"" = @TenantId
+                  AND si.""StoreId"" = @StoreId";
+            
+            AddParam(command, "@TenantId", tenantId);
+            AddParam(command, "@StoreId", storeId);
+
+            var stockLevels = new Dictionary<Guid, (int stock, decimal price, int min, string uom)>();
+            using (var reader = await command.ExecuteReaderAsync())
+            {
+                while (await reader.ReadAsync())
+                {
+                    stockLevels[reader.GetGuid(0)] = (
+                        reader.GetInt32(1), 
+                        reader.GetDecimal(2), 
+                        reader.GetInt32(3),
+                        reader.IsDBNull(4) ? "UND" : reader.GetString(4)
+                    );
+                }
+            }
+
+            foreach (var p in performance)
+            {
+                if (!stockLevels.TryGetValue(p.ProductId, out var stockInfo)) continue;
+
+                var dailyRate = p.TotalSold / 30m; 
+                if (dailyRate == 0 && stockInfo.stock > 0) continue; 
+
+                int daysRemaining = dailyRate > 0 ? (int)(stockInfo.stock / dailyRate) : 999;
+                
+                string riskLevel = "Low";
+                
+                if (daysRemaining <= 3) riskLevel = "Critical";
+                else if (daysRemaining <= 7) riskLevel = "High";
+                else if (daysRemaining <= 14) riskLevel = "Medium";
+
+                // Priority overrides based on Minimum Stock
+                if (stockInfo.stock <= 0) 
+                {
+                    riskLevel = "Critical";
+                    daysRemaining = 0;
+                }
+                else if (stockInfo.stock <= stockInfo.min)
+                {
+                    if (riskLevel == "Medium" || riskLevel == "Low") riskLevel = "High";
+                }
+
+                if (riskLevel != "Low")
+                {
+                    atRisk.Add(new RiskAssessmentDto(
+                        p.ProductId,
+                        p.ProductCode,
+                        p.ProductName,
+                        stockInfo.stock,
+                        Math.Round(dailyRate, 2),
+                        daysRemaining,
+                        riskLevel,
+                        stockInfo.uom
+                    ));
+
+                    if (riskLevel == "Critical" || riskLevel == "High")
+                    {
+                        var targetDays = 21;
+                        var quantityToOrder = (int)(dailyRate * targetDays) - stockInfo.stock;
+                        if (stockInfo.stock <= 0 && quantityToOrder <= 0) quantityToOrder = stockInfo.min > 0 ? stockInfo.min : 10;
+                        
+                        if (quantityToOrder > 0)
+                        {
+                            suggestedPurchases.Add(new SuggestedPurchaseDto(
+                                p.ProductId,
+                                p.ProductCode,
+                                p.ProductName,
+                                quantityToOrder,
+                                quantityToOrder * stockInfo.price,
+                                $"Consumo diario de {Math.Round(dailyRate, 2)} unidades. Se sugiere comprar para cubrir {targetDays} días."
+                            ));
+                        }
+                    }
+                }
+            }
+
+            var deadStock = performance.Where(p => p.DaysSinceLastSale > 30 && p.TotalSold > 0).ToList();
+
+            string aiSummary;
+            if (generateAi)
+            {
+                var prompt = $@"
+                    Eres un consultor experto en gestión de inventarios para MYPES en Perú. 
+                    Analiza los siguientes datos de inventario y proporciona un resumen estratégico en español (máximo 3 frases).
+                    Enfócate en el impacto financiero, la urgencia de reponer los productos críticos y qué hacer con el stock estancado.
+
+                    DATOS DE RIESGO:
+                    - Productos Críticos (menos de 3 días de stock): {atRisk.Count(r => r.RiskLevel == "Critical")}
+                    - Productos con Riesgo Alto (menos de 7 días): {atRisk.Count(r => r.RiskLevel == "High")}
+                    - Productos con Riesgo Medio (menos de 14 días): {atRisk.Count(r => r.RiskLevel == "Medium")}
+                    - Capital atrapado en productos sin rotación (30+ días): {deadStock.Count} productos.
+
+                    PÉRDIDA POTENCIAL:
+                    - Inversión sugerida para evitar quiebres: S/ {suggestedPurchases.Sum(s => s.EstimatedCost):N2}
+                ";
+
+                try 
+                {
+                    var result = await _kernel.InvokePromptAsync(prompt);
+                    aiSummary = result.ToString();
+                }
+                catch (Exception ex)
+                {
+                    // Fallback to basic logic if AI is down
+                    _logger.LogError(ex, "Error invoking AI prompt for inventory insights");
+                    aiSummary = $"Análisis completado. Tienes {atRisk.Count(r => r.RiskLevel == "Critical")} productos en estado crítico. Se recomienda revisar las órdenes de compra urgentes.";
+                }
+            }
+            else 
+            {
+                aiSummary = "Presiona 'Recalcular Inteligencia' para obtener un análisis estratégico detallado con IA sobre estos resultados.";
+            }
+
+            return new InventoryInsightReportDto(
+                atRisk.OrderBy(a => a.EstimatedDaysRemaining).ToList(),
+                deadStock,
+                suggestedPurchases.OrderByDescending(s => s.EstimatedCost).ToList(),
+                aiSummary
+            );
+        }
+        finally
+        {
+            if (!wasOpen) await connection.CloseAsync();
+        }
+    }
+
     public async Task<IEnumerable<LowStockAlertDto>> GetLowStockAlertsAsync(string tenantId, Guid storeId)
     {
         var alerts = new List<LowStockAlertDto>();
@@ -482,7 +643,7 @@ public class AnalyticsService : IAnalyticsService
         catch (Exception ex)
         {
             // Log error but don't crash dashboard
-            Console.WriteLine($"Error fetching low stock alerts: {ex.Message}");
+            _logger.LogError(ex, "Error fetching low stock alerts for store {StoreId}", storeId);
         }
         finally
         {
@@ -573,7 +734,7 @@ public class AnalyticsService : IAnalyticsService
             AddParam(command, "@StoreId", storeId);
             
             var insertedSummaries = await command.ExecuteNonQueryAsync();
-            Console.WriteLine($"[Analytics] Generated {insertedSummaries} daily summary rows.");
+            _logger.LogInformation("Generated {Count} daily summary rows for store {StoreId}", insertedSummaries, storeId);
 
             // 3. Generate Product Performance
             command.CommandText = @"

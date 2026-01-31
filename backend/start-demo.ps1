@@ -19,6 +19,7 @@ Write-Host ""
 Write-Host "Environment: $env:ASPNETCORE_ENVIRONMENT" -ForegroundColor Yellow
 Write-Host "Database: profitzen_demo" -ForegroundColor Yellow
 Write-Host ""
+
 Write-Host "Building solution..." -ForegroundColor Green
 dotnet build
 Write-Host ""

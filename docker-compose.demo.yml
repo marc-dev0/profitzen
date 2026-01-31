@@ -38,6 +38,7 @@ services:
       - Services__ApiKey=${SERVICE_KEY}
       - EnvironmentSettings__IsDemo=true
       - EnvironmentSettings__AutoSeedDemoData=true
+      - Serilog__WriteTo__2__Args__serverUrl=http://seq-demo:5341
     depends_on:
       - postgres-demo
     networks:
@@ -54,6 +55,7 @@ services:
       - ConnectionStrings__DefaultConnection=Host=postgres-demo;Database=profitzen_demo;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
       - Services__ApiKey=${SERVICE_KEY}
       - FileStorage__UploadPath=/var/profitzen/uploads
+      - Serilog__WriteTo__2__Args__serverUrl=http://seq-demo:5341
     depends_on:
       - postgres-demo
     networks:
@@ -71,6 +73,7 @@ services:
       - Services__ApiKey=${SERVICE_KEY}
       - Services__ProductService__Url=http://product-service-demo:8080
       - Services__MasterData__Url=http://configuration-service-demo:8080
+      - Serilog__WriteTo__2__Args__serverUrl=http://seq-demo:5341
     depends_on:
       - postgres-demo
     networks:
@@ -86,6 +89,7 @@ services:
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=postgres-demo;Database=profitzen_demo;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
       - Services__ApiKey=${SERVICE_KEY}
+      - Serilog__WriteTo__2__Args__serverUrl=http://seq-demo:5341
     depends_on:
       - postgres-demo
     networks:
@@ -101,6 +105,7 @@ services:
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=postgres-demo;Database=profitzen_demo;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
       - Services__ApiKey=${SERVICE_KEY}
+      - Serilog__WriteTo__2__Args__serverUrl=http://seq-demo:5341
     depends_on:
       - postgres-demo
     networks:
@@ -119,6 +124,7 @@ services:
       - Services__Inventory__Url=http://inventory-service-demo:8080
       - Services__ConfigurationUrl=http://configuration-service-demo:8080
       - Services__ApiKey=${SERVICE_KEY}
+      - Serilog__WriteTo__2__Args__serverUrl=http://seq-demo:5341
     depends_on:
       - postgres-demo
     networks:
@@ -134,6 +140,8 @@ services:
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=postgres-demo;Database=profitzen_demo;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
       - Services__ApiKey=${SERVICE_KEY}
+      - Serilog__WriteTo__2__Args__serverUrl=http://seq-demo:5341
+      - AI__OllamaUrl=http://ollama-demo:11434
     depends_on:
       - postgres-demo
     networks:
@@ -164,9 +172,42 @@ services:
     networks:
       - profitzen-demo-network
 
+  ollama-demo:
+    image: ollama/ollama:latest
+    restart: always
+    volumes:
+      - ollama_demo_data:/root/.ollama
+    networks:
+      - profitzen-demo-network
+
+  ollama-pull-model-demo:
+    image: curlimages/curl
+    depends_on:
+      - ollama-demo
+    networks:
+      - profitzen-demo-network
+    command: >
+      sh -c "sleep 10 && curl -X POST http://ollama-demo:11434/api/pull -d '{\"name\": \"llama3\"}'"
+
+  seq-demo:
+    image: datalust/seq:latest
+    restart: always
+    environment:
+      - ACCEPT_EULA=Y
+      - SEQ_FIRSTRUN_ADMINPASSWORD=${SEQ_ADMIN_PASSWORD:-admin_password_123}
+    ports:
+      - "5342:80"
+      - "5341:5341"
+    volumes:
+      - seq_demo_data:/data
+    networks:
+      - profitzen-demo-network
+
 volumes:
   postgres_demo_data:
   redis_demo_data:
+  ollama_demo_data:
+  seq_demo_data:
 
 
 networks:

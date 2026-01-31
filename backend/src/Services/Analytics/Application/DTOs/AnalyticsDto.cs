@@ -105,3 +105,30 @@ public record PeriodComparisonDto(
     int PreviousSales,
     int SalesChange
 );
+
+public record RiskAssessmentDto(
+    Guid ProductId,
+    string ProductCode,
+    string ProductName,
+    int CurrentStock,
+    decimal DailyConsumptionRate,
+    int EstimatedDaysRemaining,
+    string RiskLevel, // "Critical", "High", "Medium", "Low"
+    string UomName = "UND"
+);
+
+public record SuggestedPurchaseDto(
+    Guid ProductId,
+    string ProductCode,
+    string ProductName,
+    int QuantityToOrder,
+    decimal EstimatedCost,
+    string Reason
+);
+
+public record InventoryInsightReportDto(
+    List<RiskAssessmentDto> AtRiskProducts,
+    List<ProductPerformanceDto> DeadStock,
+    List<SuggestedPurchaseDto> PurchaseRecommendations,
+    string AiSummary
+);
