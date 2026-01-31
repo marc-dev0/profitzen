@@ -197,7 +197,7 @@ services:
       - SEQ_FIRSTRUN_ADMINPASSWORD=${SEQ_ADMIN_PASSWORD:-admin_password_123}
     ports:
       - "5342:80"
-      - "5341:5341"
+      - "5343:5341"
     volumes:
       - seq_demo_data:/data
     networks:
