@@ -147,6 +147,8 @@ services:
       - Services__ApiKey=${SERVICE_KEY}
       - Serilog__WriteTo__2__Args__serverUrl=http://seq-demo:5341
       - AI__OllamaUrl=http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - postgres-demo
     networks:
