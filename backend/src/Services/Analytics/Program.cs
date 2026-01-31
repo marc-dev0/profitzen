@@ -57,7 +57,7 @@ builder.Services.AddHttpClient();
 // AI - Semantic Kernel with local Ollama
 var ollamaUrl = builder.Configuration["AI__OllamaUrl"] ?? "http://localhost:11434";
 builder.Services.AddKernel()
-                .AddOllamaChatCompletion("llama3", new Uri(ollamaUrl));
+                .AddOllamaChatCompletion("llama3.2", new Uri(ollamaUrl));
 
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 builder.Services.AddAuthorization();
