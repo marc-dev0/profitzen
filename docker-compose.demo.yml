@@ -146,7 +146,7 @@ services:
       - ConnectionStrings__DefaultConnection=Host=postgres-demo;Database=profitzen_demo;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
       - Services__ApiKey=${SERVICE_KEY}
       - Serilog__WriteTo__2__Args__serverUrl=http://seq-demo:5341
-      - AI__OllamaUrl=http://ollama-demo:11434
+      - AI__OllamaUrl=http://host.docker.internal:11434
     depends_on:
       - postgres-demo
     networks:
