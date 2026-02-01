@@ -106,6 +106,20 @@ public class SalesController : ControllerBase
         }
     }
 
+    [HttpPost("{id:guid}/items/bulk")]
+    public async Task<IActionResult> AddItemsToSale(Guid id, [FromBody] IEnumerable<AddSaleItemRequest> requests)
+    {
+        try
+        {
+            var sale = await _salesService.AddItemsToSaleAsync(id, requests);
+            return Ok(sale);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
     [HttpDelete("{id:guid}/items/{productId:guid}")]
     public async Task<IActionResult> RemoveItemFromSale(Guid id, Guid productId)
     {

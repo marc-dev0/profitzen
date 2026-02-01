@@ -643,22 +643,21 @@ export default function POSPage() {
 
       const saleId = createSaleResponse.data.id;
 
-      // Step 2: Add items to the sale
-      let saleWithItems;
-      for (const item of cart) {
-        const response = await apiClient.post(`/api/sales/${saleId}/items`, {
-          productId: item.productId,
-          productName: `${item.productName} (${item.uomName})`,
-          productCode: item.productCode,
-          quantity: item.quantity,
-          unitPrice: item.price,
-          discountAmount: 0,
-          conversionToBase: item.conversionToBase,
-          uomId: item.uomId || null,
-          uomCode: item.uomCode || null
-        });
-        saleWithItems = response.data;
-      }
+      // Step 2: Add items to the sale (Bulk)
+      const itemsPayload = cart.map(item => ({
+        productId: item.productId,
+        productName: `${item.productName}${item.uomName ? ` (${item.uomName})` : ''}`,
+        productCode: item.productCode,
+        quantity: item.quantity,
+        unitPrice: item.price,
+        discountAmount: 0,
+        conversionToBase: item.conversionToBase,
+        uomId: item.uomId || null,
+        uomCode: item.uomCode || null
+      }));
+
+      const itemsResponse = await apiClient.post(`/api/sales/${saleId}/items/bulk`, itemsPayload);
+      const saleWithItems = itemsResponse.data;
 
       // Step 3: Add payment
       const selectedMethod = BusinessConfig.payment.methods.find(m => m.name === paymentMethod);

@@ -9,6 +9,7 @@ public interface ISalesService
     Task<SaleDto?> GetSaleByNumberAsync(string saleNumber);
     Task<SaleDto> CreateSaleAsync(CreateSaleRequest request, Guid storeId, Guid cashierId, string tenantId);
     Task<SaleDto> AddItemToSaleAsync(Guid saleId, AddSaleItemRequest request);
+    Task<SaleDto> AddItemsToSaleAsync(Guid saleId, IEnumerable<AddSaleItemRequest> requests);
     Task<SaleDto> RemoveItemFromSaleAsync(Guid saleId, Guid productId);
     Task<SaleDto> UpdateSaleItemAsync(Guid saleId, Guid productId, UpdateSaleItemRequest request);
     Task<SaleDto> ApplyDiscountAsync(Guid saleId, ApplyDiscountRequest request);

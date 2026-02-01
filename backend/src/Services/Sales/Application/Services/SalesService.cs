@@ -161,59 +161,38 @@ public class SalesService : ISalesService
 
     public async Task<SaleDto> AddItemToSaleAsync(Guid saleId, AddSaleItemRequest request)
     {
-        _logger.LogInformation("Adding item to sale. SaleId: {SaleId}, ProductId: {ProductId}, ProductName: {ProductName}, Quantity: {Quantity}, UnitPrice: {UnitPrice}",
-            saleId, request.ProductId, request.ProductName, request.Quantity, request.UnitPrice);
+        return await AddItemsToSaleAsync(saleId, new[] { request });
+    }
+
+    public async Task<SaleDto> AddItemsToSaleAsync(Guid saleId, IEnumerable<AddSaleItemRequest> requests)
+    {
+        _logger.LogInformation("Adding {Count} items to sale. SaleId: {SaleId}", requests.Count(), saleId);
 
         try
         {
-            // Load sale WITH tracking (no AsNoTracking)
             var sale = await _context.Sales
                 .Include(s => s.Items)
                 .FirstOrDefaultAsync(s => s.Id == saleId);
 
             if (sale == null)
-            {
-                _logger.LogWarning("Sale not found. SaleId: {SaleId}", saleId);
                 throw new InvalidOperationException("Sale not found");
-            }
 
-            _logger.LogInformation("Sale loaded. Status: {Status}, Current items: {ItemCount}",
-                sale.Status, sale.Items.Count);
-
-            sale.AddItem(request.ProductId, request.ProductName, request.ProductCode,
-                        request.Quantity, request.UnitPrice, request.DiscountAmount, request.ConversionToBase,
-                        request.UOMId, request.UOMCode);
-
-            _logger.LogInformation("Item added to sale. New item count: {ItemCount}", sale.Items.Count);
-
-            // SAFE STATE MANAGEMENT
-            // Only force 'Added' state for items that are truly new to the context
-            foreach (var item in sale.Items)
+            foreach (var request in requests)
             {
-                var entry = _context.Entry(item);
-                if (entry.State == EntityState.Detached)
-                {
-                    _logger.LogInformation("Marking detached item {ProductId} as Added", item.ProductId);
-                    entry.State = EntityState.Added;
-                }
+                sale.AddItem(request.ProductId, request.ProductName, request.ProductCode,
+                            request.Quantity, request.UnitPrice, request.DiscountAmount, request.ConversionToBase,
+                            request.UOMId, request.UOMCode);
             }
 
+            // EF will automatically track new items added to the collection and updates to existing ones
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Changes saved successfully.");
-
-            var result = await GetSaleByIdAsync(saleId)
+            return await GetSaleByIdAsync(saleId)
                 ?? throw new InvalidOperationException("Failed to retrieve updated sale");
-
-            _logger.LogInformation("Item added successfully. SaleId: {SaleId}, TotalItems: {ItemCount}, Total: {Total}",
-                saleId, result.Items.Count, result.Total);
-
-            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error adding item to sale. SaleId: {SaleId}, ProductId: {ProductId}, Error: {ErrorMessage}",
-                saleId, request.ProductId, ex.Message);
+            _logger.LogError(ex, "Error adding items to sale. SaleId: {SaleId}", saleId);
             throw;
         }
     }
@@ -276,48 +255,18 @@ public class SalesService : ISalesService
                 .FirstOrDefaultAsync(s => s.Id == saleId);
 
             if (sale == null)
-            {
-                _logger.LogWarning("Sale not found. SaleId: {SaleId}", saleId);
                 throw new InvalidOperationException("Sale not found");
-            }
-
-            _logger.LogInformation("Sale loaded. Status: {Status}, Current items: {ItemCount}, Current payments: {PaymentCount}",
-                sale.Status, sale.Items.Count, sale.Payments.Count);
 
             sale.AddPayment(request.Method, request.Amount, request.Reference);
 
-            _logger.LogInformation("Payment added to sale. New payment count: {PaymentCount}", sale.Payments.Count);
-
-            var saleEntry = _context.Entry(sale);
-            var newPayment = sale.Payments.Last();
-            var paymentEntry = _context.Entry(newPayment);
-
-            _logger.LogInformation("Sale entity state: {SaleState}", saleEntry.State);
-            _logger.LogInformation("New Payment entity state: {PaymentState}, PaymentId: {PaymentId}, SaleId: {SaleId}",
-                paymentEntry.State, newPayment.Id, newPayment.SaleId);
-
-            if (paymentEntry.State != Microsoft.EntityFrameworkCore.EntityState.Added)
-            {
-                _logger.LogWarning("Payment state was {State}, forcing to Added", paymentEntry.State);
-                paymentEntry.State = Microsoft.EntityFrameworkCore.EntityState.Added;
-            }
-
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Changes saved successfully.");
-
-            var result = await GetSaleByIdAsync(saleId)
+            return await GetSaleByIdAsync(saleId)
                 ?? throw new InvalidOperationException("Failed to retrieve updated sale");
-
-            _logger.LogInformation("Payment added successfully. SaleId: {SaleId}, TotalPayments: {PaymentCount}, PaidAmount: {PaidAmount}",
-                saleId, result.Payments.Count, result.PaidAmount);
-
-            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error adding payment to sale. SaleId: {SaleId}, Method: {Method}, Error: {ErrorMessage}",
-                saleId, request.Method, ex.Message);
+            _logger.LogError(ex, "Error adding payment to sale. SaleId: {SaleId}", saleId);
             throw;
         }
     }
