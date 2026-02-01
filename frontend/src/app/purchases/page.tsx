@@ -116,6 +116,13 @@ export default function PurchasesPage() {
     }
   }, [documentTypes, formData.documentType]);
 
+  // Sync storeId with user's currentStoreId when it loads
+  useEffect(() => {
+    if (user?.currentStoreId && formData.storeId !== user.currentStoreId) {
+      setFormData(prev => ({ ...prev, storeId: user.currentStoreId || '' }));
+    }
+  }, [user?.currentStoreId]);
+
   if (!_hasHydrated || !isAuthenticated) {
     return null;
   }
