@@ -1076,7 +1076,13 @@ export default function POSPage() {
                 </div>
               ) : (
                 <>
-                  <div className="space-y-3 mb-6 max-h-[350px] overflow-y-auto pr-2">
+                  <div className="mb-4 max-h-[500px] overflow-y-auto border border-border rounded-xl">
+                    <div className="grid grid-cols-12 gap-2 px-4 py-2 border-b bg-muted/50 text-[10px] font-bold text-muted-foreground uppercase tracking-wider sticky top-0 z-10">
+                      <div className="col-span-1">Cant.</div>
+                      <div className="col-span-6">Producto</div>
+                      <div className="col-span-4 text-right">Total</div>
+                      <div className="col-span-1"></div>
+                    </div>
                     {cart.map((item, index) => {
                       const product = products?.find(p => p.id === item.productId);
                       const availableUOMs = product?.saleUOMs?.filter(uom => uom.isActive !== false) || [];
@@ -1087,109 +1093,94 @@ export default function POSPage() {
                           key={`${item.productId}-${item.uomId}`}
                           ref={(el) => { cartItemRefs.current[index] = el; }}
                           onClick={() => { setFocusMode('cart'); setSelectedCartIndex(index); }}
-                          className={`p-4 rounded-lg border transition-all ${isSelected
-                            ? 'bg-primary/10 border-primary shadow-lg ring-2 ring-primary/20'
-                            : 'bg-muted/30 border-border hover:border-primary/50 cursor-pointer'
+                          className={`grid grid-cols-12 gap-2 items-center px-4 py-2 border-b transition-colors cursor-pointer group ${isSelected
+                            ? 'bg-primary/10 border-primary/30 z-20 relative'
+                            : 'bg-background hover:bg-muted/30 border-border'
                             }`}
                         >
-                          <div className="flex justify-between items-start mb-3">
-                            <div className="flex-1">
-                              <p className={`font-bold ${isSelected ? 'text-primary' : 'text-foreground'}`}>{item.productName}</p>
-                              <p className="text-sm text-muted-foreground">{formatCurrency(item.price)} × {item.quantity}</p>
-                            </div>
-                            <button
-                              onClick={() => removeFromCart(item.productId, item.uomId)}
-                              className="text-destructive hover:text-destructive/80 hover:bg-destructive/10 p-1 rounded transition"
-                            >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
-                          </div>
-
-                          {availableUOMs.length > 1 && (
-                            <div className="mb-3">
-                              <select
-                                value={item.uomId}
-                                onChange={(e) => updateCartItemUOM(item.productId, item.uomId, e.target.value)}
-                                className="w-full px-3 py-2 text-sm border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-background text-foreground"
-                              >
-                                {availableUOMs.map(uom => (
-                                  <option key={uom.uomId} value={uom.uomId}>
-                                    {uom.uomName} - {formatCurrency(getProductPrice(product!, selectedPriceList, uom.uomId))}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          )}
-
-                          {availableUOMs.length <= 1 && (
-                            <p className="text-xs text-muted-foreground mb-3">{item.uomName}</p>
-                          )}
-
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-2 bg-background border border-border rounded-lg p-1">
+                          {/* Columna Cantidad */}
+                          <div className="col-span-1 flex flex-col items-center">
+                            <input
+                              ref={(el) => { quantityInputRefs.current[index] = el; }}
+                              type="text"
+                              inputMode="numeric"
+                              value={item.quantity === 0 ? '' : item.quantity}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === '') {
+                                  updateQuantity(item.productId, item.uomId, 0);
+                                  return;
+                                }
+                                const parsed = parseInt(val);
+                                if (!isNaN(parsed)) {
+                                  updateQuantity(item.productId, item.uomId, Math.max(0, parsed));
+                                }
+                              }}
+                              onFocus={(e) => e.target.select()}
+                              className="w-full text-center font-bold text-foreground bg-transparent border-0 focus:ring-0 p-0 text-sm"
+                            />
+                            <div className="flex flex-col gap-0.5 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                               <button
-                                onClick={() => updateQuantity(item.productId, item.uomId, item.quantity - 1)}
-                                className="w-8 h-8 bg-muted hover:bg-muted/80 rounded-md transition flex items-center justify-center text-foreground font-bold"
-                              >
-                                −
-                              </button>
-                              <input
-                                ref={(el) => { quantityInputRefs.current[index] = el; }}
-                                type="text"
-                                inputMode="numeric"
-                                value={item.quantity === 0 ? '' : item.quantity}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  if (val === '') {
-                                    updateQuantity(item.productId, item.uomId, 0); // Temporary 0 for empty UI
-                                    return;
-                                  }
-                                  const parsed = parseInt(val);
-                                  if (!isNaN(parsed)) {
-                                    updateQuantity(item.productId, item.uomId, Math.max(0, parsed));
-                                  }
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    if (paymentMethod === 'Efectivo') {
-                                      setFocusMode('payment');
-                                      amountReceivedRef.current?.focus();
-                                      amountReceivedRef.current?.select();
-                                    } else {
-                                      setFocusMode('payment');
-                                      processButtonRef.current?.focus();
-                                    }
-                                  }
-                                }}
-                                onBlur={(e) => {
-                                  if (item.quantity <= 0) {
-                                    updateQuantity(item.productId, item.uomId, 1);
-                                  }
-                                }}
-                                onFocus={(e) => e.target.select()}
-                                className="w-14 text-center font-bold text-foreground border-0 focus:outline-none focus:ring-0 bg-transparent"
-                              />
-                              <button
-                                onClick={() => updateQuantity(item.productId, item.uomId, item.quantity + 1)}
-                                className="w-8 h-8 bg-muted hover:bg-muted/80 rounded-md transition flex items-center justify-center text-foreground font-bold"
+                                onClick={(e) => { e.stopPropagation(); updateQuantity(item.productId, item.uomId, item.quantity + 1); }}
+                                className="w-4 h-4 rounded-full bg-primary/20 hover:bg-primary/40 flex items-center justify-center text-[10px] font-bold"
                               >
                                 +
                               </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); updateQuantity(item.productId, item.uomId, item.quantity - 1); }}
+                                className="w-4 h-4 rounded-full bg-muted hover:bg-muted/80 flex items-center justify-center text-[10px] font-bold"
+                              >
+                                −
+                              </button>
                             </div>
-                            <p className="text-lg font-bold text-foreground">
+                          </div>
+
+                          {/* Columna Producto */}
+                          <div className="col-span-6 overflow-hidden">
+                            <p className={`font-bold leading-tight truncate text-sm ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+                              {item.productName}
+                            </p>
+
+                            <div className="flex items-center gap-1 mt-0.5">
+                              {availableUOMs.length > 1 ? (
+                                <select
+                                  value={item.uomId}
+                                  onChange={(e) => updateCartItemUOM(item.productId, item.uomId, e.target.value)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-[10px] bg-muted/50 border-0 rounded p-0 text-muted-foreground focus:ring-0 focus:text-foreground h-4 leading-none"
+                                >
+                                  {availableUOMs.map(uom => (
+                                    <option key={uom.uomId} value={uom.uomId}>
+                                      {uom.uomName} (S/ {getProductPrice(product!, selectedPriceList, uom.uomId).toFixed(2)})
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground uppercase font-medium">
+                                  {item.uomName} · S/ {item.price.toFixed(2)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Columna Total */}
+                          <div className="col-span-4 text-right">
+                            <p className="text-sm font-bold text-foreground">
                               {formatCurrency(item.subtotal)}
                             </p>
                           </div>
-                          {isSelected && (
-                            <div className="mt-2 text-xs text-primary font-semibold flex items-center gap-2 flex-wrap">
-                              <span>+ / - : Cantidad</span>
-                              <span>Del : Eliminar</span>
-                              <span>↵ : Pagar</span>
-                            </div>
-                          )}
+
+                          {/* Columna Acción */}
+                          <div className="col-span-1 text-right">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); removeFromCart(item.productId, item.uomId); }}
+                              className="text-muted-foreground hover:text-destructive p-1 rounded transition-colors"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
