@@ -912,7 +912,7 @@ export default function InventarioPage() {
                         <p className="text-muted-foreground mt-1">Control y administración de stock</p>
                     </div>
                     <Link
-                        href="/inventario/carga-inicial"
+                        href="/inventory/carga-inicial"
                         className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium shadow-sm"
                     >
                         <TrendingUp className="w-4 h-4" />
@@ -1067,7 +1067,7 @@ export default function InventarioPage() {
                                 searchable={true}
                                 searchPlaceholder="Buscar por código o nombre..."
                                 searchKeys={['productCode', 'productName', 'categoryName', 'barcode', 'shortScanCode']}
-                                defaultRowsPerPage={25}
+                                defaultRowsPerPage={10}
                                 rowsPerPageOptions={[10, 25, 50, 100]}
                                 selectedItems={selectedItems}
                                 onSelectionChange={setSelectedItems}
@@ -1206,7 +1206,7 @@ export default function InventarioPage() {
                                 searchable={true}
                                 searchPlaceholder="Buscar por producto..."
                                 searchKeys={['productName', 'productCode', 'barcode', 'shortScanCode']}
-                                defaultRowsPerPage={25}
+                                defaultRowsPerPage={10}
                                 rowsPerPageOptions={[10, 25, 50, 100]}
                             />
                         </>

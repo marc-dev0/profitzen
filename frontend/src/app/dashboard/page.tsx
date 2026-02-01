@@ -1,16 +1,30 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { useAuthStore } from '@/store/authStore';
-import { useDashboard } from '@/hooks/useAnalytics';
-import { toast } from 'sonner';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { FileSpreadsheet, FileText } from 'lucide-react';
+import { useState, useMemo } from 'react';
 import AppLayout from '@/components/layout/AppLayout';
+import { useDashboard } from '@/hooks/useAnalytics';
+import { useAuthStore } from '@/store/authStore';
+import {
+  TrendingUp,
+  DollarSign,
+  ShoppingCart,
+  Users,
+  ArrowUp,
+  ArrowDown,
+  Calendar,
+  Package,
+  AlertTriangle,
+  ArrowRight,
+  TrendingDown,
+  Download,
+  FileText,
+  BarChart3,
+  Wallet,
+  Tag,
+  PieChart as PieChartIcon,
+  RefreshCw,
+  Clock
+} from 'lucide-react';
 import {
   LineChart,
   Line,
@@ -21,523 +35,326 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
+  Cell,
   PieChart,
   Pie,
-  Cell
+  AreaChart,
+  Area
 } from 'recharts';
+import { useRouter } from 'next/navigation';
 
-const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
-
-const PAYMENT_METHOD_NAMES: Record<string, string> = {
-  'Cash': 'Efectivo',
-  'Card': 'Tarjeta',
-  'Transfer': 'Transferencia',
-  'Yape': 'Yape',
-  'Plin': 'Plin',
-  'Credit': 'Crédito'
-};
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, isAuthenticated, _hasHydrated, logout } = useAuthStore();
+  const { user } = useAuthStore();
+  const { data: dashboardData, isLoading, isError, error, refetch } = useDashboard(user?.currentStoreId);
 
-  console.log('[Dashboard] User:', user);
-  console.log('[Dashboard] StoreId:', user?.currentStoreId);
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(amount);
+  };
 
-  const { data: dashboardData, isLoading, error } = useDashboard(user?.currentStoreId);
+  const formatPercentage = (p: number) => {
+    return `${p >= 0 ? '+' : ''}${p.toFixed(1)}%`;
+  };
 
-  useEffect(() => {
-    if (_hasHydrated && !isAuthenticated) {
-      router.push('/login');
-    }
-  }, [isAuthenticated, _hasHydrated, router]);
+  const chartData = useMemo(() => {
+    if (!dashboardData?.last30Days) return [];
+    return dashboardData.last30Days.map(d => ({
+      date: new Date(d.date).toLocaleDateString('es-PE', { day: '2-digit', month: 'short' }),
+      revenue: d.totalRevenue,
+      profit: d.totalProfit || 0
+    }));
+  }, [dashboardData]);
 
-  if (!_hasHydrated || !isAuthenticated) {
-    return null;
+
+
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <div className="h-full min-h-[50vh] flex items-center justify-center flex-col gap-4">
+          <RefreshCw className="w-8 h-8 text-primary animate-spin" />
+          <p className="text-muted-foreground font-medium animate-pulse">Cargando tablero...</p>
+        </div>
+      </AppLayout>
+    );
   }
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('es-PE', {
-      style: 'currency',
-      currency: 'PEN'
-    }).format(value);
-  };
+  if (isError) {
+    return (
+      <AppLayout>
+        <div className="h-full min-h-[50vh] flex flex-col items-center justify-center gap-4 text-center p-8">
+          <div className="p-4 bg-destructive/10 rounded-full">
+            <AlertTriangle className="w-12 h-12 text-destructive" />
+          </div>
+          <div className="max-w-md space-y-2">
+            <h2 className="text-2xl font-black text-foreground tracking-tight">¡Ups! Algo salió mal</h2>
+            <p className="text-muted-foreground font-medium">
+              No pudimos cargar tu comando de ventas. Por favor intenta nuevamente.
+            </p>
+            <p className="text-xs text-muted-foreground bg-muted p-2 rounded mt-2 font-mono break-all text-left">
+              {(error as any)?.response?.data?.error || (error as any)?.response?.data?.message || (error as Error)?.message || 'Error desconocido'}
+              {(error as any)?.response?.data?.inner && (
+                <span className="block mt-1 text-red-500">{(error as any).response.data.inner}</span>
+              )}
+            </p>
+          </div>
+          <button
+            onClick={() => refetch()}
+            className="mt-4 px-8 py-3 bg-primary text-primary-foreground rounded-xl hover:opacity-90 shadow-lg shadow-primary/20 transition-all font-bold flex items-center gap-2"
+          >
+            <RefreshCw className="w-5 h-5" />
+            Reintentar Conexión
+          </button>
+        </div>
+      </AppLayout>
+    );
+  }
 
-  const formatPercentage = (value: number) => {
-    const sign = value >= 0 ? '+' : '';
-    return `${sign}${value.toFixed(1)}%`;
-  };
+  if (!user?.currentStoreId) {
+    return (
+      <AppLayout>
+        <div className="h-full min-h-[50vh] flex flex-col items-center justify-center text-center p-8">
+          <h2 className="text-xl font-bold">Selecciona un Almacén</h2>
+          <p className="text-muted-foreground">Debes seleccionar una sucursal para ver el tablero.</p>
+        </div>
+      </AppLayout>
+    );
+  }
 
-  const formatShortDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const day = date.getUTCDate().toString().padStart(2, '0');
-    const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
-    return `${day}/${month}`;
-  };
-
-  const chartData = dashboardData?.last30Days?.map(day => ({
-    date: formatShortDate(day.date),
-    ventas: day.totalRevenue,
-    transacciones: day.totalSales
-  })) || [];
-
-  const topProductsData = dashboardData?.topProducts?.slice(0, 5).map(p => ({
-    name: p.productName.length > 25 ? p.productName.substring(0, 25) + '...' : p.productName,
-    fullName: p.productName,
-    ventas: p.totalRevenue,
-    cantidad: p.totalSold
-  })) || [];
-
-  const paymentMethodData = dashboardData?.salesByPaymentMethod?.map(pm => ({
-    name: PAYMENT_METHOD_NAMES[pm.paymentMethod] || pm.paymentMethod,
-    value: pm.totalAmount,
-    count: pm.transactionCount
-  })) || [];
-
-  const exportToExcel = (data: any) => {
-    const exportData = [
-      { Métrica: 'Ventas Hoy', Valor: formatCurrency(data.todayRevenue) },
-      { Métrica: 'Ventas Semana', Valor: formatCurrency(data.weekRevenue) },
-      { Métrica: 'Ventas Mes', Valor: formatCurrency(data.monthRevenue) },
-      { Métrica: 'Ticket Promedio', Valor: formatCurrency(data.averageTicket) },
-    ];
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Dashboard');
-
-    if (data.topProducts && data.topProducts.length > 0) {
-      const productsData = data.topProducts.map((p: any, i: number) => ({
-        '#': i + 1,
-        Producto: p.productName,
-        Cantidad: p.totalSold,
-        Ingresos: formatCurrency(p.totalRevenue)
-      }));
-      const wsProducts = XLSX.utils.json_to_sheet(productsData);
-      XLSX.utils.book_append_sheet(wb, wsProducts, 'Top Productos');
-    }
-
-    const fileName = `dashboard-${new Date().toISOString().split('T')[0]}.xlsx`;
-    XLSX.writeFile(wb, fileName);
-    toast.success('Archivo Excel descargado correctamente');
-  };
-
-  const exportToPDF = (data: any) => {
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.width;
-
-    doc.setFontSize(20);
-    doc.setFont('helvetica', 'bold');
-    doc.text('DASHBOARD DE VENTAS', pageWidth / 2, 20, { align: 'center' });
-
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    const today = new Date();
-    const dateStr = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
-    doc.text(`Generado: ${dateStr}`, pageWidth / 2, 28, { align: 'center' });
-
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Resumen Ejecutivo', 14, 40);
-
-    const summaryData = [
-      ['Métrica', 'Valor'],
-      ['Ventas Hoy', formatCurrency(data.todayRevenue)],
-      ['Ventas Semana', formatCurrency(data.weekRevenue)],
-      ['Ventas Mes', formatCurrency(data.monthRevenue)],
-      ['Ticket Promedio', formatCurrency(data.averageTicket)]
-    ];
-
-    autoTable(doc, {
-      startY: 45,
-      head: [summaryData[0]],
-      body: summaryData.slice(1),
-      theme: 'grid',
-      headStyles: { fillColor: [59, 130, 246] }
-    });
-
-    if (data.topProducts && data.topProducts.length > 0) {
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      const topProductsY = (doc as any).lastAutoTable.finalY + 15;
-      doc.text('Top Productos', 14, topProductsY);
-
-      const productsData = data.topProducts.slice(0, 10).map((p: any, i: number) => [
-        (i + 1).toString(),
-        p.productName,
-        p.totalSold.toString(),
-        formatCurrency(p.totalRevenue)
-      ]);
-
-      autoTable(doc, {
-        startY: topProductsY + 5,
-        head: [['#', 'Producto', 'Cantidad', 'Ingresos']],
-        body: productsData,
-        theme: 'striped',
-        headStyles: { fillColor: [16, 185, 129] }
-      });
-    }
-
-    doc.save(`dashboard-${new Date().toISOString().split('T')[0]}.pdf`);
-    toast.success('Reporte PDF generado correctamente');
-  };
+  if (!dashboardData) {
+    return (
+      <AppLayout>
+        <div className="h-full min-h-[50vh] flex flex-col items-center justify-center text-center p-8">
+          <RefreshCw className="w-12 h-12 text-muted-foreground mb-4" />
+          <h2 className="text-xl font-bold">Esperando datos...</h2>
+          <p className="text-muted-foreground mb-4">Si esto persiste, intenta sincronizar manualmente.</p>
+          <button
+            onClick={() => refetch()}
+            className="px-6 py-2 bg-primary text-primary-foreground rounded-lg font-bold"
+          >
+            Recargar
+          </button>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
-
     <AppLayout>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">
-            Dashboard de Ventas
-          </h2>
-          <p className="text-sm text-muted-foreground mt-1">Análisis y tendencias de tu negocio</p>
+          <h1 className="text-3xl font-black text-foreground tracking-tight">Comando de Ventas</h1>
+          <p className="text-muted-foreground font-medium mt-1">Resumen ejecutivo del rendimiento operativo</p>
         </div>
-        {!isLoading && !error && dashboardData && (
-          <div className="flex gap-3">
-            <button
-              onClick={() => exportToExcel(dashboardData)}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium shadow-lg shadow-green-600/30 flex items-center gap-2"
-            >
-              <FileSpreadsheet className="w-5 h-5" />
-              Exportar Excel
-            </button>
-            <button
-              onClick={() => exportToPDF(dashboardData)}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium shadow-lg shadow-red-600/30 flex items-center gap-2"
-            >
-              <FileText className="w-5 h-5" />
-              Exportar PDF
-            </button>
-          </div>
-        )}
+        <div className="flex gap-3">
+          <button
+            onClick={() => refetch()}
+            className="p-3 bg-secondary text-secondary-foreground rounded-2xl hover:bg-secondary/80 transition-all flex items-center gap-2 font-bold"
+          >
+            <RefreshCw className="w-5 h-5" />
+            Actualizar
+          </button>
+          <button
+            onClick={() => router.push('/analytics')}
+            className="p-3 bg-primary text-primary-foreground rounded-2xl hover:opacity-90 shadow-lg shadow-primary/20 transition-all flex items-center gap-2 font-bold"
+          >
+            <BarChart3 className="w-5 h-5" />
+            Análisis Profundo
+          </button>
+        </div>
       </div>
 
-      {isLoading && (
-        <div className="text-center py-8">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          <p className="mt-2 text-muted-foreground">Cargando datos...</p>
+      {/* KPI Section - High Impact */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+        <div className="bg-card border border-border rounded-3xl p-6 shadow-sm relative overflow-hidden group">
+          <div className="absolute -right-4 -top-4 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-all" />
+          <div className="flex items-center gap-4 mb-4">
+            <div className="w-12 h-12 rounded-2xl bg-blue-500/20 flex items-center justify-center">
+              <DollarSign className="w-6 h-6 text-blue-600" />
+            </div>
+            <span className="text-xs font-black text-muted-foreground uppercase tracking-widest">Ventas Hoy</span>
+          </div>
+          <p className="text-3xl font-black text-foreground">{formatCurrency(dashboardData.todayRevenue)}</p>
+          <div className="mt-4 flex items-center gap-2">
+            <span className={`flex items-center text-xs font-bold px-2 py-0.5 rounded-full ${dashboardData.revenueGrowthPercentage >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+              {dashboardData.revenueGrowthPercentage >= 0 ? <ArrowUp className="w-3 h-3 mr-1" /> : <ArrowDown className="w-3 h-3 mr-1" />}
+              {formatPercentage(dashboardData.revenueGrowthPercentage)}
+            </span>
+            <span className="text-[10px] font-bold text-muted-foreground uppercase">{dashboardData.todaySalesCount} Tickets</span>
+          </div>
         </div>
-      )}
 
-      {error && (
-        <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded mb-4">
-          <p className="font-medium">No hay datos disponibles</p>
-          <p className="text-sm mt-1">El sistema aun no tiene ventas registradas. Los datos apareceran una vez que se procesen las primeras transacciones.</p>
+        <div className="bg-card border border-border rounded-3xl p-6 shadow-sm relative overflow-hidden group">
+          <div className="absolute -right-4 -top-4 w-24 h-24 bg-indigo-500/10 rounded-full blur-2xl group-hover:bg-indigo-500/20 transition-all" />
+          <div className="flex items-center gap-4 mb-4">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 flex items-center justify-center">
+              <TrendingUp className="w-6 h-6 text-indigo-600" />
+            </div>
+            <span className="text-xs font-black text-muted-foreground uppercase tracking-widest">Utilidad Hoy</span>
+          </div>
+          <p className="text-3xl font-black text-indigo-600">
+            {formatCurrency(dashboardData.todayProfit || 0)}
+          </p>
+          <p className="mt-4 text-[10px] font-bold text-muted-foreground uppercase flex items-center gap-2">
+            <Clock className="w-3 h-3" />
+            Margen: {dashboardData.todayRevenue > 0 ? ((dashboardData.todayProfit / dashboardData.todayRevenue) * 100).toFixed(1) : 0}%
+          </p>
         </div>
-      )}
 
-      {!isLoading && !error && dashboardData && (
-        <>
-          {/* Low Stock Alerts */}
-          {dashboardData.lowStockAlerts && dashboardData.lowStockAlerts.length > 0 && (
-            <div className="mb-8">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center">
-                  <div className="p-2 bg-red-100 rounded-lg mr-3">
-                    <svg className="h-5 w-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-foreground">Alertas de Stock Bajo</h3>
-                    <p className="text-sm text-muted-foreground">{dashboardData.lowStockAlerts.length} productos requieren atención</p>
-                  </div>
-                </div>
-                <Link
-                  href="/inventario"
-                  className="text-sm font-medium text-primary hover:text-primary/80 flex items-center bg-primary/10 px-3 py-1.5 rounded-full transition-colors"
-                >
-                  Ver inventario completo
-                  <svg className="h-4 w-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </Link>
+        <div className="bg-card border border-border rounded-3xl p-6 shadow-sm relative overflow-hidden group">
+          <div className="absolute -right-4 -top-4 w-24 h-24 bg-orange-500/10 rounded-full blur-2xl group-hover:bg-orange-500/20 transition-all" />
+          <div className="flex items-center gap-4 mb-4">
+            <div className="w-12 h-12 rounded-2xl bg-orange-500/20 flex items-center justify-center">
+              <ShoppingCart className="w-6 h-6 text-orange-600" />
+            </div>
+            <span className="text-xs font-black text-muted-foreground uppercase tracking-widest">Ticket Promedio</span>
+          </div>
+          <p className="text-3xl font-black text-foreground">{formatCurrency(dashboardData.averageTicket)}</p>
+          <div className="mt-4 flex items-center gap-2">
+            <span className={`flex items-center text-xs font-bold px-2 py-0.5 rounded-full ${dashboardData.averageTicket >= dashboardData.lastMonthAverageTicket ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+              {dashboardData.averageTicket >= dashboardData.lastMonthAverageTicket ? <ArrowUp className="w-3 h-3 mr-1" /> : <ArrowDown className="w-3 h-3 mr-1" />}
+              {dashboardData.lastMonthAverageTicket > 0 ? (((dashboardData.averageTicket - dashboardData.lastMonthAverageTicket) / dashboardData.lastMonthAverageTicket) * 100).toFixed(1) : 0}%
+            </span>
+            <span className="text-[10px] font-bold text-muted-foreground uppercase">vs mes anterior</span>
+          </div>
+        </div>
+
+        <div className="bg-card border border-border rounded-3xl p-6 shadow-sm relative overflow-hidden group">
+          <div className="absolute -right-4 -top-4 w-24 h-24 bg-purple-500/10 rounded-full blur-2xl group-hover:bg-purple-500/20 transition-all" />
+          <div className="flex items-center gap-4 mb-4">
+            <div className="w-12 h-12 rounded-2xl bg-purple-500/20 flex items-center justify-center">
+              <Package className="w-6 h-6 text-purple-600" />
+            </div>
+            <span className="text-xs font-black text-muted-foreground uppercase tracking-widest">Alertas Stock</span>
+          </div>
+          <p className="text-3xl font-black text-foreground">{dashboardData.lowStockAlerts.length}</p>
+          <div className="mt-4 flex items-center gap-2">
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${dashboardData.lowStockAlerts.length > 5 ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
+              {dashboardData.lowStockAlerts.length > 5 ? 'Atención Crítica' : 'Nivel Normal'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Main Chart Card */}
+        <div className="lg:col-span-2 bg-card border border-border rounded-[2.5rem] p-8 shadow-sm">
+          <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-1 h-8 bg-primary rounded-full" />
+              <div>
+                <h3 className="text-xl font-black tracking-tight uppercase">Tendencia Mensual</h3>
+                <p className="text-sm text-muted-foreground font-medium">Volumen de ventas de los últimos 30 días</p>
               </div>
+            </div>
+            <div className="flex gap-4">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-blue-500" />
+                <span className="text-xs font-bold uppercase tracking-tighter">Ventas</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-green-500" />
+                <span className="text-xs font-bold uppercase tracking-tighter">Utilidad</span>
+              </div>
+            </div>
+          </div>
+          <div className="h-[380px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.5} />
+                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 700, fill: '#64748b' }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 700, fill: '#64748b' }} tickFormatter={(v) => `S/${v}`} />
+                <Tooltip
+                  contentStyle={{ borderRadius: '1.5rem', border: '1px solid #e2e8f0', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
+                  itemStyle={{ fontWeight: 800 }}
+                  labelStyle={{ fontWeight: 800, marginBottom: '0.5rem' }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="revenue"
+                  stroke="#3b82f6"
+                  strokeWidth={4}
+                  fillOpacity={1}
+                  fill="url(#colorRevenue)"
+                  animationDuration={1500}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="profit"
+                  stroke="#10b981"
+                  strokeWidth={4}
+                  fillOpacity={1}
+                  fill="url(#colorProfit)"
+                  animationDuration={1500}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
 
-              <div className="flex overflow-x-auto pb-4 gap-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent -mx-4 px-4 sm:mx-0 sm:px-0">
-                {dashboardData.lowStockAlerts.map((alert, index) => (
-                  <div
-                    key={`${alert.productId}-${index}`}
-                    className={`min-w-[280px] md:min-w-[320px] bg-card border border-border rounded-xl p-4 shadow-sm hover:shadow-md transition-all duration-200 border-l-4 group
-                          ${alert.severity === 'critical' ? 'border-l-red-500' :
-                        alert.severity === 'high' ? 'border-l-orange-500' : 'border-l-yellow-400'
-                      }`}
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="flex-1 min-w-0 pr-2">
-                        <h4 className="font-semibold text-foreground truncate" title={alert.productName}>
-                          {alert.productName}
-                        </h4>
-                        <span className="inline-block text-xs font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded border border-border mt-1">
-                          {alert.productCode}
-                        </span>
-                      </div>
-                      <span className={`px-2 py-1 rounded text-xs font-bold uppercase tracking-wide
-                            ${alert.severity === 'critical' ? 'bg-red-50 text-red-700' :
-                          alert.severity === 'high' ? 'bg-orange-50 text-orange-700' : 'bg-yellow-50 text-yellow-700'
-                        }`}
-                      >
-                        {alert.severity === 'critical' ? 'CRÍTICO' :
-                          alert.severity === 'high' ? 'ALTO' : 'MEDIO'}
+        {/* Side Actions & Inventory */}
+        <div className="space-y-6">
+          <div className="bg-slate-950 text-white rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden group cursor-pointer" onClick={() => router.push('/pos')}>
+            <div className="absolute top-0 right-0 p-8 opacity-20 transform group-hover:scale-110 transition-transform duration-500">
+              <ShoppingCart className="w-24 h-24" />
+            </div>
+            <div className="relative z-10">
+              <h3 className="text-sm font-black text-blue-400 uppercase tracking-widest mb-2">Acceso Rápido</h3>
+              <p className="text-2xl font-black mb-6">Iniciar Punto de Venta (POS)</p>
+              <div className="flex items-center gap-2 group/btn">
+                <span className="text-sm font-bold border-b border-blue-400 pb-0.5">Abrir Terminal</span>
+                <ArrowRight className="w-4 h-4 group-hover/btn:translate-x-1 transition-transform" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-card border border-border rounded-[2.5rem] p-8 shadow-sm">
+            <h3 className="text-lg font-black uppercase tracking-tight mb-6 flex items-center justify-between">
+              Alertas de Stock
+              <span className="text-xs bg-red-100 text-red-600 px-3 py-1 rounded-full">{dashboardData.lowStockAlerts.length}</span>
+            </h3>
+            <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+              {dashboardData.lowStockAlerts.length > 0 ? (
+                dashboardData.lowStockAlerts.map((alert, i) => (
+                  <div key={i} className="flex items-center justify-between p-4 rounded-2xl bg-muted/30 border border-transparent hover:border-border transition-all">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-black text-primary uppercase tracking-tighter">{alert.productCode}</span>
+                      <span className="text-sm font-bold text-foreground truncate max-w-[120px]">{alert.productName}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className={`text-xs font-black px-2 py-0.5 rounded-md ${alert.severity === 'critical' ? 'bg-red-500 text-white' : 'bg-orange-500 text-white'}`}>
+                        {alert.currentStock} und
                       </span>
                     </div>
-
-                    <div className="mt-4 flex items-end justify-between">
-                      <div>
-                        <div className="text-xs text-muted-foreground mb-1">Stock Actual</div>
-                        <div className={`text-2xl font-bold font-mono leading-none
-                              ${alert.severity === 'critical' ? 'text-red-500' :
-                            alert.severity === 'high' ? 'text-orange-500' : 'text-foreground'
-                          }`}>
-                          {alert.currentStock}
-                          <span className="text-sm font-normal text-gray-400 ml-1">/ {alert.minimumStock}</span>
-                        </div>
-                      </div>
-
-                      {/* Mini visual indicator bar */}
-                      <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${alert.severity === 'critical' ? 'bg-red-500' :
-                            alert.severity === 'high' ? 'bg-orange-500' : 'bg-yellow-400'
-                            }`}
-                          style={{ width: `${Math.min((alert.currentStock / alert.minimumStock) * 100, 100)}%` }}
-                        />
-                      </div>
-                    </div>
                   </div>
-                ))}
-              </div>
+                ))
+              ) : (
+                <div className="text-center py-10">
+                  <Package className="w-12 h-12 text-muted/30 mx-auto mb-2" />
+                  <p className="text-xs font-bold text-muted-foreground uppercase">Inventario Óptimo</p>
+                </div>
+              )}
             </div>
-          )}
-
-          {/* KPI Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <div className="bg-card p-6 rounded-lg shadow border-l-4 border-blue-500">
-              <h3 className="text-sm font-medium text-muted-foreground uppercase">Ventas Hoy</h3>
-              <p className="text-2xl font-bold text-foreground mt-2">
-                {formatCurrency(dashboardData.todayRevenue)}
-              </p>
-              <div className="flex items-center mt-2">
-                <span className={`text-sm font-medium ${dashboardData.revenueGrowthPercentage >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {formatPercentage(dashboardData.revenueGrowthPercentage)}
-                </span>
-                <span className="text-sm text-muted-foreground ml-1">vs ayer</span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">{dashboardData.todaySalesCount} transacciones</p>
-            </div>
-
-            <div className="bg-card p-6 rounded-lg shadow border-l-4 border-green-500">
-              <h3 className="text-sm font-medium text-muted-foreground uppercase">Semana</h3>
-              <p className="text-2xl font-bold text-foreground mt-2">
-                {formatCurrency(dashboardData.weekRevenue)}
-              </p>
-              <div className="flex items-center mt-2">
-                <span className={`text-sm font-medium ${dashboardData.weekGrowthPercentage >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {formatPercentage(dashboardData.weekGrowthPercentage)}
-                </span>
-                <span className="text-sm text-muted-foreground ml-1">vs sem. ant.</span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">Sem. Ant.: {formatCurrency(dashboardData.lastWeekRevenue)}</p>
-            </div>
-
-            <div className="bg-card p-6 rounded-lg shadow border-l-4 border-purple-500">
-              <h3 className="text-sm font-medium text-muted-foreground uppercase">Mes</h3>
-              <p className="text-2xl font-bold text-foreground mt-2">
-                {formatCurrency(dashboardData.monthRevenue)}
-              </p>
-              <div className="flex items-center mt-2">
-                <span className={`text-sm font-medium ${dashboardData.monthGrowthPercentage >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {formatPercentage(dashboardData.monthGrowthPercentage)}
-                </span>
-                <span className="text-sm text-muted-foreground ml-1">vs mes ant.</span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">Mes Ant.: {formatCurrency(dashboardData.lastMonthRevenue)}</p>
-            </div>
-
-            <div className="bg-card p-6 rounded-lg shadow border-l-4 border-orange-500">
-              <h3 className="text-sm font-medium text-muted-foreground uppercase">Ticket Promedio</h3>
-              <p className="text-2xl font-bold text-foreground mt-2">
-                {formatCurrency(dashboardData.averageTicket)}
-              </p>
-              <div className="flex items-center mt-2">
-                <span className={`text-sm font-medium ${dashboardData.averageTicket >= dashboardData.lastMonthAverageTicket ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                  {dashboardData.lastMonthAverageTicket > 0
-                    ? formatPercentage(((dashboardData.averageTicket - dashboardData.lastMonthAverageTicket) / dashboardData.lastMonthAverageTicket) * 100)
-                    : '+0.0%'}
-                </span>
-                <span className="text-sm text-muted-foreground ml-1">vs mes ant.</span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">Mes Ant.: {formatCurrency(dashboardData.lastMonthAverageTicket)}</p>
-            </div>
+            <button
+              onClick={() => router.push('/inventory')}
+              className="w-full mt-6 py-4 rounded-2xl border-2 border-dashed border-border text-xs font-black uppercase tracking-widest text-muted-foreground hover:bg-secondary hover:text-foreground transition-all"
+            >
+              Gestionar Almacén
+            </button>
           </div>
-
-          {/* Charts Row */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            {/* Sales Trend Chart */}
-            <div className="bg-card p-6 rounded-lg shadow border border-border">
-              <h3 className="text-lg font-semibold text-foreground mb-4">Tendencia de Ventas (30 dias)</h3>
-              {chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fontSize: 11 }}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis
-                      tick={{ fontSize: 11 }}
-                      tickFormatter={(value) => value >= 1000 ? `S/${(value / 1000).toFixed(1)}k` : `S/${value}`}
-                    />
-                    <Tooltip
-                      formatter={(value) => formatCurrency(Number(value))}
-                      labelStyle={{ color: '#374151' }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="ventas"
-                      stroke="#3B82F6"
-                      strokeWidth={2}
-                      dot={false}
-                      name="Ventas"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                  No hay datos para mostrar
-                </div>
-              )}
-            </div>
-
-            {/* Top Products Bar Chart */}
-            <div className="bg-card p-6 rounded-lg shadow border border-border">
-              <h3 className="text-lg font-semibold text-foreground mb-4">Top 5 Productos (30 dias)</h3>
-              {topProductsData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={topProductsData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis
-                      type="number"
-                      tick={{ fontSize: 11 }}
-                      tickFormatter={(value) => value >= 1000 ? `S/${(value / 1000).toFixed(1)}k` : `S/${value}`}
-                    />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      tick={{ fontSize: 11 }}
-                      width={190}
-                    />
-                    <Tooltip
-                      formatter={(value) => formatCurrency(Number(value || 0))}
-                      labelStyle={{ color: '#374151' }}
-                    />
-                    <Bar dataKey="ventas" fill="#10B981" name="ventas" />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                  No hay datos para mostrar
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Bottom Row */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Payment Methods Pie Chart */}
-            <div className="bg-card p-6 rounded-lg shadow border border-border">
-              <h3 className="text-lg font-semibold text-foreground mb-4">Metodos de Pago (Mes)</h3>
-              {paymentMethodData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={250}>
-                  <PieChart margin={{ top: 0, right: 80, left: 80, bottom: 0 }}>
-                    <Pie
-                      data={paymentMethodData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={40}
-                      outerRadius={60}
-                      fill="#8884d8"
-                      paddingAngle={5}
-                      dataKey="value"
-                      label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
-                    >
-                      {paymentMethodData.map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => formatCurrency(Number(value || 0))} />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-[250px] flex items-center justify-center text-muted-foreground">
-                  No hay datos para mostrar
-                </div>
-              )}
-            </div>
-
-            {/* Top Products Table */}
-            <div className="bg-card p-6 rounded-lg shadow border border-border lg:col-span-2">
-              <h3 className="text-lg font-semibold text-foreground mb-4">Productos Mas Vendidos</h3>
-              {dashboardData.topProducts && dashboardData.topProducts.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-border">
-                    <thead className="bg-muted/50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">#</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Codigo</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Producto</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Cant.</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Ingresos</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-card divide-y divide-border">
-                      {dashboardData.topProducts.slice(0, 10).map((product) => (
-                        <tr key={product.productId} className="hover:bg-muted/50">
-                          <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-foreground">
-                            {product.rank}
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">
-                            {product.productCode}
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-foreground">
-                            {product.productName}
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-foreground text-right">
-                            {product.totalSold}
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-green-600 text-right">
-                            {formatCurrency(product.totalRevenue)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  No hay productos vendidos aun
-                </div>
-              )}
-            </div>
-          </div>
-        </>
-      )}
-
-      {!isLoading && !error && !dashboardData && (
-        <div className="text-center py-8 bg-card rounded-lg shadow border border-border">
-          <svg className="mx-auto h-12 w-12 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-          </svg>
-          <p className="mt-4 text-muted-foreground">
-            Bienvenido al sistema Profitzen. Comienza a registrar ventas para ver tus metricas aqui.
-          </p>
-          <Link href="/pos" className="mt-4 inline-block px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-            Ir a Punto de Venta
-          </Link>
         </div>
-      )}
+      </div>
     </AppLayout>
   );
 }

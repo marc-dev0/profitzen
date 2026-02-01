@@ -35,7 +35,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
         { name: 'Reportes', href: '/analytics', icon: BarChart3, code: 'analytics' },
         { name: 'Analizador IA', href: '/analytics/ia', icon: BrainCircuit, code: 'analytics' },
         { name: 'Productos', href: '/products', icon: Tags, code: 'products' },
-        { name: 'Inventario', href: '/inventario', icon: Package, code: 'inventory' },
+        { name: 'Inventario', href: '/inventory', icon: Package, code: 'inventory' },
         { name: 'Compras', href: '/purchases', icon: CreditCard, code: 'purchases' },
         { name: 'Proveedores', href: '/suppliers', icon: Truck, code: 'suppliers' },
         { name: 'Clientes', href: '/customers', icon: Users, code: 'customers' },

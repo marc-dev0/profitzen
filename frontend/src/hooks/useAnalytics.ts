@@ -42,9 +42,19 @@ export function useProductPerformance(storeId?: string) {
 
 export function useRecalculateAnalytics() {
   return useMutation({
-    mutationFn: async () => {
-      const response = await apiClient.post('/api/analytics/generate-summaries');
+    mutationFn: async (storeId?: string) => {
+      const response = await apiClient.post(`/api/analytics/generate-summaries${storeId ? `?storeId=${storeId}` : ''}`);
       return response.data;
     }
   });
+}
+
+export function useAnalyticsActions() {
+  const recalculate = useRecalculateAnalytics();
+
+  return {
+    generateReport: async (storeId?: string) => {
+      return recalculate.mutateAsync(storeId);
+    }
+  };
 }

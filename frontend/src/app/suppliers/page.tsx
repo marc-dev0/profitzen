@@ -372,7 +372,7 @@ export default function SuppliersPage() {
             searchable={true}
             searchPlaceholder="Buscar por nombre, RUC, contacto..."
             searchKeys={['name', 'code', 'taxId', 'contactName', 'email', 'phone']}
-            defaultRowsPerPage={25}
+            defaultRowsPerPage={10}
             rowsPerPageOptions={[10, 25, 50, 100]}
           />
         </div>

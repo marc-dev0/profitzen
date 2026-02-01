@@ -320,8 +320,8 @@ export default function TransferList({ products }: TransferListProps) {
                     searchable={true}
                     searchPlaceholder="Buscar por código, origen..."
                     searchKeys={['transferNumber', 'originStoreName', 'requesterName', 'notes']}
-                    defaultRowsPerPage={5}
-                    rowsPerPageOptions={[5, 10, 25]}
+                    defaultRowsPerPage={10}
+                    rowsPerPageOptions={[10, 25, 50]}
                 />
             </div>
 
@@ -342,8 +342,8 @@ export default function TransferList({ products }: TransferListProps) {
                     searchable={true}
                     searchPlaceholder="Buscar por código, destino..."
                     searchKeys={['transferNumber', 'destinationStoreName', 'requesterName', 'receiverName', 'notes']}
-                    defaultRowsPerPage={5}
-                    rowsPerPageOptions={[5, 10, 25]}
+                    defaultRowsPerPage={10}
+                    rowsPerPageOptions={[10, 25, 50]}
                 />
             </div>
 

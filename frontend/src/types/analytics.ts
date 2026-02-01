@@ -10,6 +10,10 @@ export interface DashboardData {
   monthRevenue: number;
   lastMonthRevenue: number;
   monthGrowthPercentage: number;
+  monthCost: number;
+  monthProfit: number;
+  todayCost: number;
+  todayProfit: number;
   averageTicket: number;
   lastMonthAverageTicket: number;
   topProducts: TopProduct[];

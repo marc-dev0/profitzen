@@ -745,6 +745,67 @@ public class SalesService : ISalesService
             .CountAsync();
         var lastMonthAverageTicket = lastMonthSalesCount > 0 ? lastMonthRevenue / lastMonthSalesCount : 0;
 
+        // Calculate Cost and Profit for Today and Month using raw SQL (efficient)
+        decimal todayCost = 0;
+        decimal monthCost = 0;
+
+        using (var connection = _context.Database.GetDbConnection())
+        {
+            await connection.OpenAsync();
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = @"
+                    SELECT 
+                        COALESCE(SUM(CASE WHEN s.""SaleDate"" >= @Today AND s.""SaleDate"" < @Tomorrow THEN si.""Quantity"" * COALESCE(si.""ConversionToBase"", 1) * (p.""PurchasePrice"" / COALESCE(pu.""ConversionToBase"", 1)) ELSE 0 END), 0) as TodayCost,
+                        COALESCE(SUM(CASE WHEN s.""SaleDate"" >= @MonthStart THEN si.""Quantity"" * COALESCE(si.""ConversionToBase"", 1) * (p.""PurchasePrice"" / COALESCE(pu.""ConversionToBase"", 1)) ELSE 0 END), 0) as MonthCost
+                    FROM sales.""Sales"" s
+                    JOIN sales.""SaleItems"" si ON s.""Id"" = si.""SaleId""
+                    JOIN product.""products"" p ON si.""ProductId"" = p.""Id""
+                    LEFT JOIN product.""product_purchase_uoms"" pu ON p.""Id"" = pu.""ProductId"" AND pu.""IsDefault"" = true
+                    WHERE s.""TenantId"" = @TenantId
+                      AND (@StoreId IS NULL OR s.""StoreId"" = @StoreId)
+                      AND s.""Status"" = 2
+                      AND s.""SaleDate"" >= @MonthStart";
+
+                var tenantParam = command.CreateParameter();
+                tenantParam.ParameterName = "@TenantId";
+                tenantParam.Value = tenantId;
+                command.Parameters.Add(tenantParam);
+
+                var storeIdParam = command.CreateParameter();
+                storeIdParam.ParameterName = "@StoreId";
+                storeIdParam.Value = storeId ?? (object)DBNull.Value;
+                command.Parameters.Add(storeIdParam);
+
+                var todayParam = command.CreateParameter();
+                todayParam.ParameterName = "@Today";
+                todayParam.Value = todayStartUtc;
+                command.Parameters.Add(todayParam);
+
+                var tomorrowParam = command.CreateParameter();
+                tomorrowParam.ParameterName = "@Tomorrow";
+                tomorrowParam.Value = tomorrowStartUtc;
+                command.Parameters.Add(tomorrowParam);
+
+                var monthStartParam = command.CreateParameter();
+                monthStartParam.ParameterName = "@MonthStart";
+                monthStartParam.Value = monthStartUtc;
+                command.Parameters.Add(monthStartParam);
+
+                using (var reader = await command.ExecuteReaderAsync())
+                {
+                    if (await reader.ReadAsync())
+                    {
+                        todayCost = reader.GetDecimal(0);
+                        monthCost = reader.GetDecimal(1);
+                    }
+                }
+            }
+        }
+
+        var todayProfit = todayRevenue - todayCost;
+        var monthProfit = monthRevenue - monthCost;
+
         // Top 10 products (last 30 days)
         var topProducts = await completedSales
             .Where(s => s.SaleDate >= last30DaysStartUtc)
@@ -820,24 +881,34 @@ public class SalesService : ISalesService
             ? await _inventoryClient.GetLowStockAlertsAsync(storeId.Value, tenantId)
             : new List<LowStockAlertDto>();
 
+        // Ensure lists are not null
+        var safeTopProducts = rankedTopProducts ?? new List<TopProductDto>();
+        var safeAllDays = allDays ?? new List<DailySalesDto>();
+        var safeSalesByPaymentMethod = salesByPaymentMethod ?? new List<SalesByPaymentMethodDto>();
+        var safeLowStockAlerts = lowStockAlerts ?? new List<LowStockAlertDto>();
+
         return new SalesDashboardDto(
             todayRevenue,
             yesterdayRevenue,
             revenueGrowth,
             todaySalesCount,
             yesterdaySalesCount,
+            todayCost,
+            todayProfit,
             weekRevenue,
             lastWeekRevenue,
             weekGrowth,
             monthRevenue,
             lastMonthRevenue,
             monthGrowth,
+            monthCost,
+            monthProfit,
             averageTicket,
             lastMonthAverageTicket,
-            rankedTopProducts,
-            allDays,
-            salesByPaymentMethod,
-            lowStockAlerts
+            safeTopProducts,
+            safeAllDays,
+            safeSalesByPaymentMethod,
+            safeLowStockAlerts
         );
     }
 
@@ -889,7 +960,7 @@ public class SalesService : ISalesService
         if (sale == null) throw new InvalidOperationException("Sale not found");
 
         // 1. Pre-fetch Logo Image if needed
-        byte[] logoBytes = null;
+        byte[]? logoBytes = null;
         if (settings.ShowLogo && !string.IsNullOrEmpty(settings.LogoUrl))
         {
             try

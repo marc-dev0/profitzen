@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import axios from 'axios';
 import { toast } from 'sonner';
 import AppLayout from '@/components/layout/AppLayout';
 import { DataTable, Column } from '@/components/DataTable';
@@ -17,7 +16,11 @@ import {
     FileText,
     BarChart3,
     BrainCircuit,
-    Sparkles
+    Sparkles,
+    RefreshCw,
+    Wallet,
+    Tag,
+    PieChart as PieChartIcon
 } from 'lucide-react';
 import {
     LineChart,
@@ -30,298 +33,144 @@ import {
     CartesianGrid,
     Tooltip,
     Legend,
-    ResponsiveContainer
+    ResponsiveContainer,
+    AreaChart,
+    Area
 } from 'recharts';
+import { useSalesReport, useProductPerformance, useAnalyticsActions } from '@/hooks/useAnalytics';
+import { useAuthStore } from '@/store/authStore';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-interface DailySale {
-    date: string;
-    totalRevenue: number;
-    totalSales: number;
-}
-
-interface PaymentMethodStat {
-    paymentMethod: string;
-    totalAmount: number;
-    transactionCount: number;
-    [key: string]: any;
-}
-
 interface TopProduct {
     rank?: number;
+    productId: string;
     productName: string;
     totalSold: number;
     totalRevenue: number;
     unitOfMeasure?: string;
+    totalProfit: number;
 }
 
-interface GroupedTopProduct extends TopProduct {
-    variants: TopProduct[];
-    totalGroupRevenue: number;
+interface GroupedTopProduct {
+    rank?: number;
+    productId: string;
+    productName: string;
+    totalSold: number;
+    totalRevenue: number;
+    totalProfit: number;
     percentage?: number;
-}
-
-
-
-
-
-interface AnalyticsData {
-    todayRevenue: number;
-    yesterdayRevenue: number;
-    revenueGrowthPercentage: number;
-    todaySalesCount: number;
-    yesterdaySalesCount: number;
-    weekRevenue: number;
-    lastWeekRevenue: number;
-    weekGrowthPercentage: number;
-    monthRevenue: number;
-    lastMonthRevenue: number;
-    monthGrowthPercentage: number;
-    averageTicket: number;
-    lastMonthAverageTicket: number;
-    topProducts: TopProduct[];
-    last30Days: DailySale[];
-    salesByPaymentMethod: PaymentMethodStat[];
-    lowStockAlerts: any[];
+    variants: TopProduct[];
 }
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
-const paymentMethodLabels: { [key: string]: string } = {
-    Cash: 'Efectivo',
-    Card: 'Tarjeta',
-    Transfer: 'Transferencia',
-    Credit: 'Crédito'
-};
-
 export default function AnalyticsPage() {
     const router = useRouter();
-    const [data, setData] = useState<AnalyticsData | null>(null);
-    const [groupedTopProducts, setGroupedTopProducts] = useState<GroupedTopProduct[]>([]);
-    const [loading, setLoading] = useState(true);
+    const { user } = useAuthStore();
+    const { generateReport } = useAnalyticsActions();
 
-    useEffect(() => {
-        fetchAnalytics();
-    }, []);
+    // Date Range State (Default last 30 days)
+    const [fromDate] = useState(() => {
+        const d = new Date();
+        d.setDate(d.getDate() - 30);
+        return d;
+    });
+    const [toDate] = useState(() => new Date());
 
-    const fetchAnalytics = async () => {
+    const { data: report, isLoading: loadingReport, refetch: refetchReport } = useSalesReport(fromDate, toDate, user?.currentStoreId);
+    const { data: lp, isLoading: loadingLP, refetch: refetchLP } = useProductPerformance(user?.currentStoreId);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+
+    const handleRefresh = async () => {
+        if (!user?.currentStoreId) return;
+        setIsRefreshing(true);
         try {
-            setLoading(true);
-            const token = localStorage.getItem('token');
-            const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/sales/dashboard`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            console.log('=== ANALYTICS DATA DEBUG ===');
-            console.log('Full response:', response);
-            console.log('Response data:', response.data);
-
-            const analyticsData: AnalyticsData = response.data;
-            setData(analyticsData);
-
-            // Grouping Logic
-            const groups: { [key: string]: GroupedTopProduct } = {};
-            analyticsData.topProducts.forEach((product) => {
-                const name = product.productName;
-                if (!groups[name]) {
-                    groups[name] = {
-                        ...product,
-                        totalSold: 0, // We will just display 'Varies' or sum if units match, but simpler to sum just revenue
-                        totalRevenue: 0,
-                        totalGroupRevenue: 0,
-                        variants: []
-                    };
-                }
-                groups[name].variants.push(product);
-                groups[name].totalRevenue += product.totalRevenue;
-                groups[name].totalGroupRevenue += product.totalRevenue;
-                // Sum quantity only if unit is same? For now let's just keep variants.
-            });
-
-            // Convert to array and sort by revenue
-            // Convert to array and sort by revenue
-            const groupedList = Object.values(groups).sort((a, b) => b.totalGroupRevenue - a.totalGroupRevenue);
-
-            // Calculate total revenue from the grouped list (which should match the raw sum)
-            const totalGroupedRevenue = groupedList.reduce((sum, p) => sum + p.totalGroupRevenue, 0);
-
-            // Calculate initial percentages and assign ranks
-            let currentSum = 0;
-            const tempProductsWithPct = groupedList.map((p, index) => {
-                p.rank = index + 1;
-                // Calculate raw percentage
-                let pct = totalGroupedRevenue > 0 ? (p.totalGroupRevenue / totalGroupedRevenue) * 100 : 0;
-                // Parse to fixed 2 decimals to simulate what we display, but keep as number
-                pct = parseFloat(pct.toFixed(2));
-                return { ...p, percentage: pct };
-            });
-
-            // Adjust rounding errors to ensure EXACTLY 100.00%
-            // We sum the rounded values. It might be 99.99 or 100.01.
-            const sumOfRounded = tempProductsWithPct.reduce((sum, p) => sum + (p.percentage || 0), 0);
-            const diff = 100 - sumOfRounded;
-
-            // If there is a difference (e.g. 0.01), add it to the first (largest) item.
-            // Using a small epsilon for float comparison safety
-            if (Math.abs(diff) > 0.001 && tempProductsWithPct.length > 0) {
-                if (tempProductsWithPct[0].percentage !== undefined) {
-                    tempProductsWithPct[0].percentage += diff;
-                    // Ensure javascript didn't introduce long float tails again
-                    tempProductsWithPct[0].percentage = parseFloat(tempProductsWithPct[0].percentage.toFixed(2));
-                }
-            }
-
-            setGroupedTopProducts(tempProductsWithPct);
-
+            await generateReport(user.currentStoreId);
+            await Promise.all([refetchReport(), refetchLP()]);
+            toast.success('Datos actualizados correctamente');
         } catch (error: any) {
-            console.error('Error fetching analytics:', error);
-            toast.error('Error al cargar las estadísticas');
+            console.error('Refresh error:', error);
+            const msg = error?.response?.data?.error || error?.message || 'Error al actualizar los datos';
+            toast.error(`Error: ${msg}`);
         } finally {
-            setLoading(false);
+            setIsRefreshing(false);
         }
     };
 
     const formatCurrency = (amount: number | undefined | null) => {
-        if (amount === undefined || amount === null || isNaN(amount)) {
-            return 'S/ 0.00';
-        }
-        return `S/ ${amount.toFixed(2)}`;
+        if (amount === undefined || amount === null || isNaN(amount)) return 'S/ 0.00';
+        return new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(amount);
     };
 
-    const formatDate = (dateString: string | undefined | null) => {
+    const formatDate = (dateString: string | Date | undefined | null) => {
         if (!dateString) return '-';
-        try {
-            const date = new Date(dateString);
-            if (isNaN(date.getTime())) return '-';
-            // Use UTC to prevent timezone shifts
-            const day = date.getUTCDate().toString().padStart(2, '0');
-            const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
-            const year = date.getUTCFullYear();
-            return `${day}/${month}/${year}`;
-        } catch {
-            return '-';
-        }
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return '-';
+        return `${date.getUTCDate().toString().padStart(2, '0')}/${(date.getUTCMonth() + 1).toString().padStart(2, '0')}/${date.getUTCFullYear()}`;
     };
 
-    const generatePDFReport = () => {
-        if (!data) return;
-
-        const doc = new jsPDF();
-        const pageWidth = doc.internal.pageSize.width;
-
-        // Header
-        doc.setFontSize(20);
-        doc.setFont('helvetica', 'bold');
-        doc.text('REPORTE DE VENTAS', pageWidth / 2, 20, { align: 'center' });
-
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        const today = new Date();
-        const dateStr = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
-        doc.text(`Generado: ${dateStr}`, pageWidth / 2, 28, { align: 'center' });
-
-        // Summary Stats
-        doc.setFontSize(14);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Resumen Ejecutivo', 14, 40);
-
-        const summaryData = [
-            ['Métrica', 'Valor', 'Variación'],
-            ['Ventas Hoy', formatCurrency(data.todayRevenue), `${data.revenueGrowthPercentage.toFixed(1)}%`],
-            ['Ventas Semana', formatCurrency(data.weekRevenue), `${data.weekGrowthPercentage.toFixed(1)}%`],
-            ['Ventas Mes', formatCurrency(data.monthRevenue), `${data.monthGrowthPercentage.toFixed(1)}%`],
-            ['Ticket Promedio', formatCurrency(data.averageTicket), '-'],
-            ['Ventas Hoy (Cant.)', data.todaySalesCount.toString(), '-']
-        ];
-
-        autoTable(doc, {
-            startY: 45,
-            head: [summaryData[0]],
-            body: summaryData.slice(1),
-            theme: 'grid',
-            headStyles: { fillColor: [59, 130, 246] }
-        });
-
-        // Top Products
-        doc.setFontSize(14);
-        doc.setFont('helvetica', 'bold');
-        const topProductsY = (doc as any).lastAutoTable.finalY + 15;
-        doc.text('Top 10 Productos', 14, topProductsY);
-
-        const productsData = data.topProducts.map((p, i) => [
-            (i + 1).toString(),
-            p.productName,
-            p.totalSold.toString(),
-            formatCurrency(p.totalRevenue)
-        ]);
-
-        autoTable(doc, {
-            startY: topProductsY + 5,
-            head: [['#', 'Producto', 'Cantidad', 'Ingresos']],
-            body: productsData,
-            theme: 'striped',
-            headStyles: { fillColor: [16, 185, 129] }
-        });
-
-        // Payment Methods
-        doc.addPage();
-        doc.setFontSize(14);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Ventas por Método de Pago', 14, 20);
-
-        const paymentData = data.salesByPaymentMethod.map(p => [
-            paymentMethodLabels[p.paymentMethod] || p.paymentMethod,
-            p.transactionCount.toString(),
-            formatCurrency(p.totalAmount)
-        ]);
-
-        autoTable(doc, {
-            startY: 25,
-            head: [['Método', 'Cantidad', 'Total']],
-            body: paymentData,
-            theme: 'grid',
-            headStyles: { fillColor: [245, 158, 11] }
-        });
-
-        // Footer
-        const pageCount = doc.getNumberOfPages();
-        for (let i = 1; i <= pageCount; i++) {
-            doc.setPage(i);
-            doc.setFontSize(8);
-            doc.setFont('helvetica', 'normal');
-            doc.text(
-                `Página ${i} de ${pageCount}`,
-                pageWidth / 2,
-                doc.internal.pageSize.height - 10,
-                { align: 'center' }
-            );
-        }
-
-        doc.save(`reporte-ventas-${new Date().toISOString().split('T')[0]}.pdf`);
-        toast.success('Reporte PDF generado correctamente');
+    const getBaseName = (name: string) => {
+        const match = name.match(/^(.*?)\s\(.*?\)$/);
+        return match ? match[1] : name;
     };
 
-    // Calculate total revenue for percentages
-    const totalTopProductsRevenue = data?.topProducts.reduce((sum, p) => sum + p.totalRevenue, 0) || 0;
+    // Grouping Logic for "Productos Más Vendidos (Agrupado)"
+    const groupedTopProducts = useMemo(() => {
+        if (!lp) return [];
+        const groups: Record<string, GroupedTopProduct> = {};
+
+        lp.forEach(p => {
+            const baseName = getBaseName(p.productName);
+            const key = p.productId; // Group by productId to avoid name collisions
+
+            if (!groups[key]) {
+                groups[key] = {
+                    productId: p.productId,
+                    productName: baseName,
+                    totalSold: 0,
+                    totalRevenue: 0,
+                    totalProfit: 0,
+                    variants: []
+                };
+            }
+
+            groups[key].totalSold += p.totalSold;
+            groups[key].totalRevenue += p.totalRevenue;
+            groups[key].totalProfit += p.totalProfit;
+            groups[key].variants.push({
+                productId: p.productId,
+                productName: p.productName,
+                totalSold: p.totalSold,
+                totalRevenue: p.totalRevenue,
+                totalProfit: p.totalProfit,
+                unitOfMeasure: p.productName.match(/\((.*?)\)$/)?.[1] || 'UNID'
+            });
+        });
+
+        const sorted = Object.values(groups).sort((a, b) => b.totalRevenue - a.totalRevenue);
+        const totalRevenue = sorted.reduce((sum, p) => sum + p.totalRevenue, 0);
+
+        return sorted.map((p, index) => ({
+            ...p,
+            rank: index + 1,
+            percentage: totalRevenue > 0 ? (p.totalRevenue / totalRevenue) * 100 : 0
+        }));
+    }, [lp]);
 
     const topProductColumns: Column<GroupedTopProduct>[] = [
         {
             key: 'rank',
             header: '#',
             render: (product) => {
-                // We can use the rank from backend if available, or just render it. 
-                // Backend sends 'Rank' in TopProductDto? Let's assume we map it or it comes as 'rank' (since JSON usually camelCases).
-                // If 'rank' is not in API response, we might need to rely on index in full list, but DataTable paginates...
-                // However, the backend DOES send 'Rank' (seen in SaleDto.cs). Let's use it.
-                // If for some reason it's missing, we fall back to '-' 
                 const r = product.rank || 0;
-                let bgClass = 'bg-slate-300';
-                if (r === 1) bgClass = 'bg-yellow-500';
-                else if (r === 2) bgClass = 'bg-slate-400';
-                else if (r === 3) bgClass = 'bg-orange-600';
+                let bgClass = 'bg-slate-500';
+                if (r === 1) bgClass = 'bg-yellow-500 hover:bg-yellow-600';
+                else if (r === 2) bgClass = 'bg-slate-400 hover:bg-slate-500';
+                else if (r === 3) bgClass = 'bg-orange-600 hover:bg-orange-700';
 
                 return (
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-white ${bgClass}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-white transition-colors ${bgClass}`}>
                         {r}
                     </div>
                 );
@@ -331,350 +180,313 @@ export default function AnalyticsPage() {
             key: 'productName',
             header: 'PRODUCTO',
             render: (product) => (
-                <div>
-                    <span className="font-medium text-foreground">{product.productName}</span>
+                <div className="py-2">
+                    <span className="font-bold text-foreground block">{product.productName}</span>
                     {product.variants.length > 1 && (
-                        <span className="text-xs text-muted-foreground block">{product.variants.length} presentaciones</span>
+                        <span className="text-xs text-muted-foreground font-medium">{product.variants.length} presentaciones</span>
                     )}
                 </div>
             ),
-            footer: <span className="font-bold text-foreground">TOTAL</span>
+            footer: <span className="font-bold">TOTAL</span>
         },
         {
             key: 'totalSold',
             header: 'CANTIDAD',
             className: 'text-right',
             render: (product) => {
-                // If only 1 variant, show it. If multiple, show "Ver detalle" or sum if possible?
                 if (product.variants.length === 1) {
-                    return (
-                        <span className="font-medium text-foreground">
-                            {product.variants[0].totalSold} {product.variants[0].unitOfMeasure || 'UNID'}
-                        </span>
-                    );
+                    return <span className="font-medium">{product.variants[0].totalSold} {product.variants[0].unitOfMeasure}</span>;
                 }
-                return <span className="text-sm text-muted-foreground italic">Ver detalle</span>;
+                return <span className="text-sm text-muted-foreground italic font-medium">Ver detalle</span>;
             }
         },
         {
             key: 'totalRevenue',
             header: 'INGRESOS TOTALES',
             className: 'text-right',
-            render: (product) => <span className="font-semibold text-foreground">{formatCurrency(product.totalGroupRevenue)}</span>,
-            footer: (data) => {
-                const total = data.reduce((sum, p) => sum + p.totalGroupRevenue, 0);
-                return <span className="font-bold text-foreground">{formatCurrency(total)}</span>;
-            }
+            render: (product) => <span className="font-bold text-foreground">{formatCurrency(product.totalRevenue)}</span>,
+            footer: (data) => <span className="font-bold">{formatCurrency(data.reduce((sum, p) => sum + p.totalRevenue, 0))}</span>
         },
         {
-            key: 'percentage', // Virtual key
+            key: 'percentage',
             header: '% INGRESOS',
             className: 'text-right',
-            render: (product) => {
-                const percentage = product.percentage ?? (totalTopProductsRevenue > 0 ? (product.totalGroupRevenue / totalTopProductsRevenue) * 100 : 0);
-                return (
-                    <div className="flex items-center justify-end gap-2">
-                        <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
-                            <div
-                                className="h-full bg-blue-600 rounded-full"
-                                style={{ width: `${percentage}%` }}
-                            />
-                        </div>
-                        <span className="text-sm text-muted-foreground w-12 text-right">
-                            {percentage.toFixed(2)}%
-                        </span>
+            render: (p) => (
+                <div className="flex items-center justify-end gap-3 min-w-[120px]">
+                    <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden max-w-[80px]">
+                        <div className="h-full bg-blue-600 rounded-full" style={{ width: `${p.percentage}%` }} />
                     </div>
-                );
-            },
-            footer: (data) => {
-                const totalPct = data.reduce((sum, p) => sum + (p.percentage || 0), 0);
-                return <span className="font-semibold text-foreground text-sm">{totalPct.toFixed(2)}%</span>;
-            }
+                    <span className="text-sm font-mono font-bold w-14">{p.percentage?.toFixed(2)}%</span>
+                </div>
+            ),
+            footer: (data) => <span className="font-bold">100.00%</span>
         }
     ];
 
-    const renderTopProductDetail = (product: GroupedTopProduct) => {
-        return (
-            <div className="py-2">
-                <p className="text-sm font-semibold mb-2 text-primary">Detalle por Unidad de Medida:</p>
-                <div className="bg-background rounded border border-border overflow-hidden">
-                    <table className="w-full text-sm">
-                        <thead className="bg-muted text-muted-foreground">
-                            <tr>
-                                <th className="px-4 py-2 text-left">Unidad</th>
-                                <th className="px-4 py-2 text-right">Cantidad</th>
-                                <th className="px-4 py-2 text-right">Precio Prom.</th>
-                                <th className="px-4 py-2 text-right">Ingresos</th>
-                                <th className="px-4 py-2 text-right">% del Producto</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border">
-                            {product.variants.map((variant, idx) => {
-                                const percent = product.totalGroupRevenue > 0 ? (variant.totalRevenue / product.totalGroupRevenue) * 100 : 0;
-                                const avgPrice = variant.totalSold > 0 ? variant.totalRevenue / variant.totalSold : 0;
-                                return (
-                                    <tr key={idx} className="hover:bg-muted/30">
-                                        <td className="px-4 py-2 font-medium">{variant.unitOfMeasure || 'UNID'}</td>
-                                        <td className="px-4 py-2 text-right">{variant.totalSold}</td>
-                                        <td className="px-4 py-2 text-right">{formatCurrency(avgPrice)}</td>
-                                        <td className="px-4 py-2 text-right font-semibold">{formatCurrency(variant.totalRevenue)}</td>
-                                        <td className="px-4 py-2 text-right text-muted-foreground">{percent.toFixed(2)}%</td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        );
+    const generatePDFReport = () => {
+        if (!report) return;
+        const doc = new jsPDF();
+        doc.setFontSize(22);
+        doc.text('REPORTE ANALÍTICO DE VENTAS', 105, 20, { align: 'center' });
+        doc.setFontSize(10);
+        doc.text(`Periodo: ${formatDate(fromDate)} - ${formatDate(toDate)}`, 105, 28, { align: 'center' });
+
+        const summary = [
+            ['Ingresos Totales', formatCurrency(report.totalRevenue)],
+            ['Costo de Ventas', formatCurrency(report.totalCost)],
+            ['Utilidad Bruta', formatCurrency(report.totalProfit)],
+            ['Margen de Ganancia', `${(report.profitMargin * 100).toFixed(2)}%`],
+            ['Ticket Promedio', formatCurrency(report.averageTicket)]
+        ];
+
+        autoTable(doc, {
+            startY: 40,
+            head: [['Métrica', 'Valor']],
+            body: summary,
+            theme: 'striped',
+            headStyles: { fillColor: [59, 130, 246] }
+        });
+
+        doc.save(`reporte-analitico-${new Date().toISOString().split('T')[0]}.pdf`);
+        toast.success('PDF generado con éxito');
     };
 
-    if (loading) {
+    if (loadingReport || loadingLP) {
         return (
             <AppLayout>
-                <div className="h-full flex items-center justify-center">
-                    <div className="text-center">
-                        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary mx-auto mb-4"></div>
-                        <p className="text-muted-foreground">Cargando estadísticas...</p>
-                    </div>
+                <div className="h-full flex flex-col items-center justify-center space-y-4">
+                    <RefreshCw className="w-12 h-12 text-primary animate-spin" />
+                    <p className="text-muted-foreground font-medium">Analizando datos financieros...</p>
                 </div>
             </AppLayout>
         );
     }
-
-    if (!data) {
-        return (
-            <AppLayout>
-                <div className="h-full flex items-center justify-center">
-                    <div className="text-center">
-                        <FileText className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                        <p className="text-muted-foreground">No hay datos disponibles</p>
-                        <button
-                            onClick={fetchAnalytics}
-                            className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
-                        >
-                            Reintentar
-                        </button>
-                    </div>
-                </div>
-            </AppLayout>
-        );
-    }
-
-
 
     return (
         <AppLayout>
-            {/* ... existing headers and charts ... */}
-
-            <div className="flex items-center justify-between mb-8">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
                 <div>
-                    <h1 className="text-3xl font-bold text-foreground">Dashboard de Ventas</h1>
-                    <p className="text-muted-foreground mt-1">Análisis y tendencias de tu negocio</p>
+                    <h1 className="text-4xl font-black text-foreground tracking-tight flex items-center gap-3">
+                        <BarChart3 className="w-10 h-10 text-primary" />
+                        Centro Analítico
+                    </h1>
+                    <p className="text-muted-foreground font-medium mt-1">Visión estratégica de rentabilidad y desempeño</p>
                 </div>
-                {/* ... existing buttons ... */}
-                <div className="flex gap-3">
+                <div className="flex flex-wrap gap-3">
                     <button
-                        onClick={() => router.push('/analytics/ia')}
-                        className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:shadow-purple-500/30 transition-all font-medium shadow-lg flex items-center gap-2"
+                        onClick={handleRefresh}
+                        disabled={isRefreshing}
+                        className="p-3 bg-secondary text-secondary-foreground rounded-xl hover:bg-secondary/80 transition-all shadow-sm flex items-center gap-2 font-bold"
                     >
-                        <BrainCircuit className="w-5 h-5" />
-                        Analizador IA
-                        <Sparkles className="w-3 h-3 text-yellow-300" />
+                        <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                        Sincronizar
                     </button>
                     <button
                         onClick={generatePDFReport}
-                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium shadow-lg shadow-red-600/30 flex items-center gap-2"
+                        className="p-3 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all shadow-md flex items-center gap-2 font-bold"
                     >
                         <Download className="w-5 h-5" />
-                        Descargar PDF
+                        Exportar PDF
                     </button>
                     <button
-                        onClick={() => router.push('/sales')}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg shadow-blue-600/30"
+                        onClick={() => router.push('/analytics/ia')}
+                        className="p-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg hover:shadow-indigo-500/30 transition-all font-bold flex items-center gap-2"
                     >
-                        Ver Historial
+                        <BrainCircuit className="w-6 h-6" />
+                        Analizador IA
+                        <Sparkles className="w-4 h-4 text-yellow-300" />
                     </button>
                 </div>
             </div>
 
-            {/* KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                {/* Today Revenue */}
-                <div className="bg-card rounded-xl shadow-sm border border-border p-6">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="w-12 h-12 rounded-lg bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
-                            <DollarSign className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            {/* KPI Row - Premium Style */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+                {/* Revenue Card */}
+                <div className="bg-card border border-border rounded-3xl p-6 shadow-sm relative overflow-hidden group">
+                    <div className="absolute -right-4 -top-4 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-all" />
+                    <div className="flex items-center gap-4 mb-4">
+                        <div className="w-12 h-12 rounded-2xl bg-blue-500/20 flex items-center justify-center">
+                            <DollarSign className="w-6 h-6 text-blue-600" />
                         </div>
-                        {data.revenueGrowthPercentage >= 0 ? (
-                            <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                                <ArrowUp className="w-4 h-4" />
-                                <span className="text-sm font-medium">{data.revenueGrowthPercentage.toFixed(1)}%</span>
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-1 text-red-600 dark:text-red-400">
-                                <ArrowDown className="w-4 h-4" />
-                                <span className="text-sm font-medium">{Math.abs(data.revenueGrowthPercentage).toFixed(1)}%</span>
-                            </div>
-                        )}
+                        <span className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Ingresos (30d)</span>
                     </div>
-                    <p className="text-sm text-muted-foreground mb-1">Ventas Hoy</p>
-                    <p className="text-2xl font-bold text-foreground">{formatCurrency(data.todayRevenue)}</p>
-                    <p className="text-xs text-muted-foreground mt-2">vs. ayer: {formatCurrency(data.yesterdayRevenue)}</p>
+                    <p className="text-3xl font-black text-foreground">{formatCurrency(report?.totalRevenue)}</p>
+                    <div className="mt-4 flex items-center text-xs font-bold text-green-600 bg-green-50 dark:bg-green-900/20 w-fit px-2 py-1 rounded-full">
+                        <ArrowUp className="w-3 h-3 mr-1" />
+                        Meta superada
+                    </div>
                 </div>
 
-                {/* Week Revenue */}
-                <div className="bg-card rounded-xl shadow-sm border border-border p-6">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="w-12 h-12 rounded-lg bg-green-100 dark:bg-green-900/20 flex items-center justify-center">
-                            <TrendingUp className="w-6 h-6 text-green-600 dark:text-green-400" />
+                {/* Costs Card */}
+                <div className="bg-card border border-border rounded-3xl p-6 shadow-sm relative overflow-hidden group">
+                    <div className="absolute -right-4 -top-4 w-24 h-24 bg-orange-500/10 rounded-full blur-2xl group-hover:bg-orange-500/20 transition-all" />
+                    <div className="flex items-center gap-4 mb-4">
+                        <div className="w-12 h-12 rounded-2xl bg-orange-500/20 flex items-center justify-center">
+                            <Tag className="w-6 h-6 text-orange-600" />
                         </div>
-                        {data.weekGrowthPercentage >= 0 ? (
-                            <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                                <ArrowUp className="w-4 h-4" />
-                                <span className="text-sm font-medium">{data.weekGrowthPercentage.toFixed(1)}%</span>
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-1 text-red-600 dark:text-red-400">
-                                <ArrowDown className="w-4 h-4" />
-                                <span className="text-sm font-medium">{Math.abs(data.weekGrowthPercentage).toFixed(1)}%</span>
-                            </div>
-                        )}
+                        <span className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Costo Directo</span>
                     </div>
-                    <p className="text-sm text-muted-foreground mb-1">Ventas Semana</p>
-                    <p className="text-2xl font-bold text-foreground">{formatCurrency(data.weekRevenue)}</p>
-                    <p className="text-xs text-muted-foreground mt-2">vs. semana anterior: {formatCurrency(data.lastWeekRevenue)}</p>
+                    <p className="text-3xl font-black text-orange-600">{formatCurrency(report?.totalCost)}</p>
+                    <p className="mt-4 text-xs font-medium text-muted-foreground italic">Basado en precios de compra UOM</p>
                 </div>
 
-                {/* Month Revenue */}
-                <div className="bg-card rounded-xl shadow-sm border border-border p-6">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="w-12 h-12 rounded-lg bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center">
-                            <Calendar className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                {/* Profit Card */}
+                <div className="bg-card border border-border rounded-3xl p-6 shadow-sm relative overflow-hidden group bg-gradient-to-br from-green-500/[0.03] to-transparent">
+                    <div className="absolute -right-4 -top-4 w-24 h-24 bg-green-500/10 rounded-full blur-2xl group-hover:bg-green-500/20 transition-all" />
+                    <div className="flex items-center gap-4 mb-4">
+                        <div className="w-12 h-12 rounded-2xl bg-green-500/20 flex items-center justify-center">
+                            <TrendingUp className="w-6 h-6 text-green-600" />
                         </div>
-                        {data.monthGrowthPercentage >= 0 ? (
-                            <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                                <ArrowUp className="w-4 h-4" />
-                                <span className="text-sm font-medium">{data.monthGrowthPercentage.toFixed(1)}%</span>
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-1 text-red-600 dark:text-red-400">
-                                <ArrowDown className="w-4 h-4" />
-                                <span className="text-sm font-medium">{Math.abs(data.monthGrowthPercentage).toFixed(1)}%</span>
-                            </div>
-                        )}
+                        <span className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Utilidad Bruta</span>
                     </div>
-                    <p className="text-sm text-muted-foreground mb-1">Ventas Mes</p>
-                    <p className="text-2xl font-bold text-foreground">{formatCurrency(data.monthRevenue)}</p>
-                    <p className="text-xs text-muted-foreground mt-2">vs. mes anterior: {formatCurrency(data.lastMonthRevenue)}</p>
+                    <p className="text-3xl font-black text-green-600">{formatCurrency(report?.totalProfit)}</p>
+                    <p className="mt-4 text-xs font-medium text-muted-foreground">Retorno sobre inversión</p>
                 </div>
 
-                {/* Average Ticket */}
-                <div className="bg-card rounded-xl shadow-sm border border-border p-6">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="w-12 h-12 rounded-lg bg-orange-100 dark:bg-orange-900/20 flex items-center justify-center">
-                            <ShoppingCart className="w-6 h-6 text-orange-600 dark:text-orange-400" />
+                {/* Margin Card */}
+                <div className="bg-card border border-border rounded-3xl p-6 shadow-sm relative overflow-hidden group bg-gradient-to-br from-indigo-500/[0.03] to-transparent">
+                    <div className="flex items-center gap-4 mb-4">
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 flex items-center justify-center">
+                            <PieChartIcon className="w-6 h-6 text-indigo-600" />
                         </div>
+                        <span className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Margen de Ganancia</span>
                     </div>
-                    <p className="text-sm text-muted-foreground mb-1">Ticket Promedio</p>
-                    <p className="text-2xl font-bold text-foreground">{formatCurrency(data.averageTicket)}</p>
-                    <p className="text-xs text-muted-foreground mt-2">Mes anterior: {formatCurrency(data.lastMonthAverageTicket)}</p>
+                    <p className="text-3xl font-black text-indigo-600">
+                        {((report?.profitMargin || 0) * 100).toFixed(1)}%
+                    </p>
+                    <div className="mt-4 w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full bg-indigo-600 rounded-full transition-all duration-1000" style={{ width: `${(report?.profitMargin || 0) * 100}%` }} />
+                    </div>
                 </div>
             </div>
 
-            {/* Charts Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-                {/* Sales Trend Chart */}
-                <div className="bg-card rounded-xl shadow-sm border border-border p-6">
-                    <div className="flex items-center justify-between mb-6">
-                        <h2 className="text-lg font-bold text-foreground">Tendencia de Ventas (30 días)</h2>
-                        <BarChart3 className="w-5 h-5 text-muted-foreground" />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
+                {/* Trend Chart */}
+                <div className="lg:col-span-2 bg-card border border-border rounded-3xl p-8 shadow-sm">
+                    <div className="flex items-center justify-between mb-8">
+                        <div>
+                            <h3 className="text-xl font-bold">Desempeño Temporal</h3>
+                            <p className="text-sm text-muted-foreground">Ingresos vs Utilidad por día</p>
+                        </div>
+                        <div className="flex gap-4">
+                            <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-blue-500" />
+                                <span className="text-xs font-bold uppercase tracking-tighter">Ventas</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-green-500" />
+                                <span className="text-xs font-bold uppercase tracking-tighter">Utilidad</span>
+                            </div>
+                        </div>
                     </div>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <LineChart data={data.last30Days}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                            <XAxis
-                                dataKey="date"
-                                tickFormatter={formatDate}
-                                stroke="#888888"
-                                style={{ fontSize: '12px' }}
-                            />
-                            <YAxis
-                                stroke="#888888"
-                                style={{ fontSize: '12px' }}
-                                tickFormatter={(value) => `S/ ${value}`}
-                            />
-                            <Tooltip
-                                formatter={(value: any) => formatCurrency(value)}
-                                labelFormatter={formatDate}
-                                contentStyle={{
-                                    backgroundColor: 'hsl(var(--card))',
-                                    borderColor: 'hsl(var(--border))',
-                                    borderRadius: '8px',
-                                    color: 'hsl(var(--foreground))'
-                                }}
-                                itemStyle={{ color: 'hsl(var(--foreground))' }}
-                                labelStyle={{ color: 'hsl(var(--foreground))' }}
-                            />
-                            <Legend />
-                            <Line
-                                type="monotone"
-                                dataKey="totalRevenue"
-                                stroke="hsl(var(--primary))"
-                                strokeWidth={2}
-                                name="Ventas"
-                                dot={{ fill: 'hsl(var(--primary))', r: 4 }}
-                                activeDot={{ r: 6 }}
-                            />
-                        </LineChart>
-                    </ResponsiveContainer>
+                    <div className="h-[350px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={report?.dailySummaries}>
+                                <defs>
+                                    <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1} />
+                                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                                    </linearGradient>
+                                    <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.1} />
+                                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.5} />
+                                <XAxis dataKey="date" tickFormatter={formatDate} axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 600 }} />
+                                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 600 }} tickFormatter={(v) => `S/${v}`} />
+                                <Tooltip
+                                    contentStyle={{ borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                    formatter={(v) => formatCurrency(v as number)}
+                                    labelFormatter={formatDate}
+                                />
+                                <Area type="monotone" dataKey="totalRevenue" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorRev)" />
+                                <Area type="monotone" dataKey="totalProfit" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorProfit)" />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
                 </div>
 
-                {/* Payment Methods Chart */}
-                <div className="bg-card rounded-xl shadow-sm border border-border p-6">
-                    <h2 className="text-lg font-bold text-foreground mb-6">Métodos de Pago</h2>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <PieChart>
-                            <Pie
-                                data={data.salesByPaymentMethod}
-                                cx="50%"
-                                cy="50%"
-                                labelLine={false}
-                                nameKey="paymentMethod"
-                                label={(entry: any) => {
-                                    const percent = entry.percent || 0;
-                                    if (percent < 0.05) return '';
-                                    const method = entry.payload.paymentMethod || '';
-                                    return `${paymentMethodLabels[method] || method} ${(percent * 100).toFixed(0)}%`;
-                                }}
-                                outerRadius={100}
-                                fill="#8884d8"
-                                dataKey="totalAmount"
-                            >
-                                {data.salesByPaymentMethod.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                ))}
-                            </Pie>
-                            <Tooltip formatter={(value: any) => formatCurrency(value)} />
-                        </PieChart>
-                    </ResponsiveContainer>
+                {/* Side Stats */}
+                <div className="space-y-6">
+                    <div className="bg-card border border-border rounded-3xl p-6 shadow-sm">
+                        <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
+                            <ShoppingCart className="w-5 h-5 text-muted-foreground" />
+                            Operación
+                        </h3>
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center bg-muted/30 p-3 rounded-2xl">
+                                <span className="text-sm font-medium text-muted-foreground">Ticket Mediano</span>
+                                <span className="font-bold">{formatCurrency(report?.averageTicket)}</span>
+                            </div>
+                            <div className="flex justify-between items-center bg-muted/30 p-3 rounded-2xl">
+                                <span className="text-sm font-medium text-muted-foreground">Unidades por Venta</span>
+                                <span className="font-bold">{(report ? (report.totalItems / (report.totalSales || 1)) : 0).toFixed(1)}</span>
+                            </div>
+                            <div className="flex justify-between items-center bg-muted/30 p-3 rounded-2xl">
+                                <span className="text-sm font-medium text-muted-foreground">Ventas Exitosas</span>
+                                <span className="font-bold">{report?.totalSales}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-900 text-white rounded-3xl p-6 shadow-xl relative overflow-hidden h-[180px]">
+                        <div className="absolute top-0 right-0 p-4 opacity-20">
+                            <Wallet className="w-20 h-20" />
+                        </div>
+                        <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">KPI Crítico</h3>
+                        <p className="text-lg font-medium text-slate-300">Retorno de Inversión (ROI)</p>
+                        <p className="text-4xl font-black mt-4">
+                            {(report && report.totalCost > 0) ? ((report.totalProfit / report.totalCost) * 100).toFixed(1) : 0}%
+                        </p>
+                    </div>
                 </div>
             </div>
 
-            {/* Top Products Table using DataTable */}
-            <div className="mt-8">
-                <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-lg font-bold text-foreground">Productos Más Vendidos (Agrupado)</h2>
+            {/* Top Products Table (Preserving layout and logic from image) */}
+            <div className="mt-12">
+                <div className="flex items-center justify-between mb-6">
+                    <div>
+                        <h2 className="text-2xl font-black text-foreground uppercase tracking-tight">Productos Más Vendidos (Agrupado)</h2>
+                        <p className="text-sm text-muted-foreground font-medium">Top de rendimiento por volumen de ingresos</p>
+                    </div>
                 </div>
-                <DataTable
-                    data={groupedTopProducts}
-                    columns={topProductColumns}
-                    keyExtractor={(item) => item.productName}
-                    defaultRowsPerPage={10}
-                    rowsPerPageOptions={[10, 20, 50]}
-                    emptyMessage="No hay productos vendidos en este periodo"
-                    renderDetail={renderTopProductDetail}
-                />
+                <div className="bg-card border border-border rounded-[2rem] overflow-hidden shadow-lg border-t-4 border-t-primary">
+                    <DataTable
+                        data={groupedTopProducts}
+                        columns={topProductColumns}
+                        keyExtractor={(item) => item.productId}
+                        defaultRowsPerPage={10}
+                        rowsPerPageOptions={[10, 20, 50, 100]}
+                        emptyMessage="No hay datos de productos disponibles"
+                        renderDetail={(product) => (
+                            <div className="p-6 bg-muted/20 border-t border-border">
+                                <h4 className="text-sm font-black mb-4 uppercase text-primary tracking-widest">Desglose por Presentación</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {product.variants.map((v, i) => (
+                                        <div key={i} className="bg-card border border-border p-4 rounded-2xl shadow-sm flex flex-col justify-between">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <span className="text-xs font-black bg-muted px-2 py-1 rounded-md text-muted-foreground uppercase">{v.unitOfMeasure}</span>
+                                                <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-md">Margen: {(v.totalRevenue > 0 ? (v.totalProfit / v.totalRevenue) * 100 : 0).toFixed(1)}%</span>
+                                            </div>
+                                            <p className="text-sm font-bold text-foreground truncate mb-2">{v.productName}</p>
+                                            <div className="flex justify-between items-end border-t border-border pt-2 mt-2">
+                                                <div>
+                                                    <p className="text-[10px] text-muted-foreground uppercase font-bold">Cantidad</p>
+                                                    <p className="text-sm font-black">{v.totalSold}</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-[10px] text-muted-foreground uppercase font-bold">Ingresos</p>
+                                                    <p className="text-sm font-black text-blue-600">{formatCurrency(v.totalRevenue)}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    />
+                </div>
             </div>
         </AppLayout>
     );

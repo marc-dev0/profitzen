@@ -41,7 +41,7 @@ public class AnalyticsDbContext : DbContext
             entity.Property(e => e.TotalCost).HasPrecision(18, 2);
             entity.Property(e => e.TotalProfit).HasPrecision(18, 2);
 
-            entity.HasIndex(e => new { e.TenantId, e.ProductId }).IsUnique();
+            entity.HasIndex(e => new { e.TenantId, e.ProductId, e.ProductName }).IsUnique();
             entity.HasIndex(e => e.TenantId);
             entity.HasIndex(e => e.TotalRevenue);
             entity.HasIndex(e => e.LastSaleDate);

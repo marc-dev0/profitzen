@@ -14,11 +14,13 @@ public class AnalyticsController : ControllerBase
 {
     private readonly IAnalyticsService _analyticsService;
     private readonly AnalyticsDbContext _context;
+    private readonly ILogger<AnalyticsController> _logger;
 
-    public AnalyticsController(IAnalyticsService analyticsService, AnalyticsDbContext context)
+    public AnalyticsController(IAnalyticsService analyticsService, AnalyticsDbContext context, ILogger<AnalyticsController> logger)
     {
         _analyticsService = analyticsService;
         _context = context;
+        _logger = logger;
     }
 
     private string GetCurrentTenantId()
@@ -130,61 +132,17 @@ public class AnalyticsController : ControllerBase
     [HttpPost("generate-summaries")]
     public async Task<IActionResult> GenerateSummaries()
     {
-        var tenantId = GetCurrentTenantId();
-        var storeId = GetCurrentStoreId();
-        await _analyticsService.GenerateDailySummariesAsync(tenantId, storeId);
-        return Ok(new { message = "Summaries generated successfully" });
-    }
-
-    [HttpGet("debug-counts")]
-    [AllowAnonymous]
-    public async Task<IActionResult> GetDebugCounts([FromQuery] string? storeIdParam)
-    {
-         var tenantId = GetCurrentTenantId();
-         var storeId = !string.IsNullOrEmpty(storeIdParam) ? Guid.Parse(storeIdParam) : GetCurrentStoreId();
-
-         var connection = _context.Database.GetDbConnection();
-         await connection.OpenAsync();
-         var result = new Dictionary<string, object>();
-
-         try 
-         {
-             var cmd = connection.CreateCommand();
-             
-             cmd.CommandText = $"SELECT COUNT(*) FROM sales.\"Sales\" WHERE \"TenantId\" = '{tenantId}'";
-             result["TotalSalesInDB"] = await cmd.ExecuteScalarAsync();
-
-             cmd.CommandText = $"SELECT COUNT(*) FROM sales.\"Sales\" WHERE \"TenantId\" = '{tenantId}' AND \"StoreId\" = '{storeId}'";
-             result["SalesForStore"] = await cmd.ExecuteScalarAsync();
-
-             cmd.CommandText = $"SELECT COUNT(*) FROM sales.\"Sales\" WHERE \"TenantId\" = '{tenantId}' AND \"StoreId\" = '{storeId}' AND \"Status\" = 2";
-             result["CompletedSalesForStore"] = await cmd.ExecuteScalarAsync();
-
-             cmd.CommandText = $"SELECT COUNT(*) FROM analytics.\"DailySalesSummaries\" WHERE \"TenantId\" = '{tenantId}'";
-             result["TotalSummariesInDB"] = await cmd.ExecuteScalarAsync();
-
-             cmd.CommandText = $"SELECT COUNT(*) FROM analytics.\"DailySalesSummaries\" WHERE \"TenantId\" = '{tenantId}' AND \"StoreId\" = '{storeId}'";
-             result["SummariesForStore"] = await cmd.ExecuteScalarAsync();
-
-             cmd.CommandText = $"SELECT \"Date\" FROM analytics.\"DailySalesSummaries\" WHERE \"TenantId\" = '{tenantId}' AND \"StoreId\" = '{storeId}' ORDER BY \"Date\" DESC LIMIT 5";
-             var dates = new List<string>();
-             using (var reader = await cmd.ExecuteReaderAsync())
-             {
-                 while (await reader.ReadAsync())
-                 {
-                     dates.Add(reader.GetDateTime(0).ToString("yyyy-MM-dd"));
-                 }
-             }
-             result["RecentSummaryDates"] = dates;
-             
-             result["TenantId"] = tenantId;
-             result["StoreId"] = storeId;
-         }
-         finally
-         {
-             await connection.CloseAsync();
-         }
-
-         return Ok(result);
+        try 
+        {
+            var tenantId = GetCurrentTenantId();
+            var storeId = GetCurrentStoreId();
+            await _analyticsService.GenerateDailySummariesAsync(tenantId, storeId);
+            return Ok(new { message = "Summaries generated successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating summaries");
+            return BadRequest(new { error = "An error occurred while generating summaries." });
+        }
     }
 }

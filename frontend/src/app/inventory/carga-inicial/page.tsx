@@ -339,7 +339,7 @@ export default function InitialStockLoadPage() {
 
             toast.success('Carga inicial procesada y capitalizada correctamente.');
             setItems([]);
-            router.push('/inventario');
+            router.push('/inventory');
 
         } catch (error: any) {
             console.error('Error in initial load:', error);

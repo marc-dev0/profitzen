@@ -16,7 +16,7 @@ export function Navigation() {
     { href: '/pos', label: 'Punto de Venta', allowedForAll: true },
     { href: '/products', label: 'Productos', allowedForAll: true },
     { href: '/categories', label: 'Categorías', allowedForAll: true },
-    { href: '/inventario', label: 'Inventario', allowedForAll: true },
+    { href: '/inventory', label: 'Inventario', allowedForAll: true },
     { href: '/customers', label: 'Clientes', allowedForAll: true },
     { href: '/purchases', label: 'Compras', allowedForAll: true },
     { href: '/suppliers', label: 'Proveedores', allowedForAll: true },

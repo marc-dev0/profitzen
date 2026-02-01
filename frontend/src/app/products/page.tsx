@@ -293,7 +293,7 @@ export default function ProductsPage() {
         searchable={true}
         searchPlaceholder="Buscar por código, nombre o categoría..."
         searchKeys={['code', 'name', 'categoryName', 'barcode', 'shortScanCode']}
-        defaultRowsPerPage={25}
+        defaultRowsPerPage={10}
         rowsPerPageOptions={[10, 25, 50, 100]}
       />
     </AppLayout>

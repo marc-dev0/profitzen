@@ -311,7 +311,7 @@ export default function CategoriesPage() {
         searchable={true}
         searchPlaceholder="Buscar por código o nombre..."
         searchKeys={['code', 'name', 'description']}
-        defaultRowsPerPage={25}
+        defaultRowsPerPage={10}
         rowsPerPageOptions={[10, 25, 50, 100]}
       />
     </AppLayout>

@@ -374,7 +374,7 @@ export default function CustomersPage() {
                         searchable={true}
                         searchPlaceholder="Buscar por nombre, documento o email..."
                         searchKeys={['fullName', 'documentNumber', 'email', 'phone']}
-                        defaultRowsPerPage={25}
+                        defaultRowsPerPage={10}
                         rowsPerPageOptions={[10, 25, 50, 100]}
                     />
                 </div>

@@ -16,14 +16,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { DataTable } from '@/components/DataTable';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import {
@@ -251,89 +244,99 @@ export default function StoresPage() {
           </div>
         </div>
 
-        <div className="border rounded-lg">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nombre</TableHead>
-                <TableHead>Dirección</TableHead>
-                <TableHead>Teléfono</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead>Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {stores && stores.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
-                    No hay sucursales registradas
-                  </TableCell>
-                </TableRow>
-              ) : (
-                stores?.map((store) => (
-                  <TableRow key={store.id}>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <Building2 className="h-4 w-4 text-muted-foreground" />
-                        {store.name}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <MapPin className="h-4 w-4" />
-                        {store.address}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {store.phone && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Phone className="h-4 w-4" />
-                          {store.phone}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {store.email && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Mail className="h-4 w-4" />
-                          {store.email}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={store.isActive ? 'default' : 'secondary'}>
-                        {store.isActive ? 'Activa' : 'Inactiva'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleEdit(store)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleToggleActive(store)}
-                        >
-                          {store.isActive ? (
-                            <PowerOff className="h-4 w-4 text-red-600" />
-                          ) : (
-                            <Power className="h-4 w-4 text-green-600" />
-                          )}
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
+        <DataTable
+          data={stores || []}
+          columns={[
+            {
+              key: 'name',
+              header: 'Nombre',
+              sortable: true,
+              render: (store: Store) => (
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium text-foreground">{store.name}</span>
+                </div>
+              )
+            },
+            {
+              key: 'address',
+              header: 'Dirección',
+              sortable: true,
+              render: (store: Store) => (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <MapPin className="h-4 w-4" />
+                  {store.address}
+                </div>
+              )
+            },
+            {
+              key: 'phone',
+              header: 'Teléfono',
+              render: (store: Store) => store.phone ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Phone className="h-4 w-4" />
+                  {store.phone}
+                </div>
+              ) : <span className="text-muted-foreground">-</span>
+            },
+            {
+              key: 'email',
+              header: 'Email',
+              render: (store: Store) => store.email ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Mail className="h-4 w-4" />
+                  {store.email}
+                </div>
+              ) : <span className="text-muted-foreground">-</span>
+            },
+            {
+              key: 'isActive',
+              header: 'Estado',
+              sortable: true,
+              render: (store: Store) => (
+                <Badge variant={store.isActive ? 'default' : 'secondary'}>
+                  {store.isActive ? 'Activa' : 'Inactiva'}
+                </Badge>
+              )
+            },
+            {
+              key: 'actions',
+              header: 'Acciones',
+              render: (store: Store) => (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleEdit(store)}
+                    title="Editar"
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleToggleActive(store)}
+                    title={store.isActive ? 'Desactivar' : 'Activar'}
+                  >
+                    {store.isActive ? (
+                      <PowerOff className="h-4 w-4 text-red-600" />
+                    ) : (
+                      <Power className="h-4 w-4 text-green-600" />
+                    )}
+                  </Button>
+                </div>
+              )
+            }
+          ]}
+          keyExtractor={(store) => store.id}
+          loading={isLoading}
+          emptyMessage="No hay sucursales registradas"
+          searchable={true}
+          searchPlaceholder="Buscar sucursal..."
+          searchKeys={['name', 'address', 'phone', 'email']}
+          defaultRowsPerPage={10}
+          rowsPerPageOptions={[10, 25, 50]}
+        />
 
         <Dialog
           open={isEditDialogOpen}

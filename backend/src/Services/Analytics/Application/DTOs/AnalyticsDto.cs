@@ -72,9 +72,11 @@ public record SalesByPaymentMethodDto(
 public record DashboardDto(
     decimal TodayRevenue,
     decimal YesterdayRevenue,
-    decimal RevenueGrowthPercentage, // Renamed from RevenueGrowth to match frontend
-    int TodaySalesCount, // Renamed from TodaySales
-    int YesterdaySalesCount, // Renamed from YesterdaySales
+    decimal RevenueGrowthPercentage,
+    int TodaySalesCount,
+    int YesterdaySalesCount,
+    decimal TodayCost,
+    decimal TodayProfit,
     int TotalCustomers,
     int NewCustomersThisMonth,
     decimal AverageTicket,
@@ -85,8 +87,10 @@ public record DashboardDto(
     decimal MonthRevenue,
     decimal LastMonthRevenue,
     decimal MonthGrowthPercentage,
+    decimal MonthCost,
+    decimal MonthProfit,
     List<TopProductsDto> TopProducts,
-    List<DailySalesSummaryDto> Last30Days, // Renamed from Last7Days
+    List<DailySalesSummaryDto> Last30Days,
     List<SalesByPaymentMethodDto> SalesByPaymentMethod,
     List<LowStockAlertDto> LowStockAlerts
 );

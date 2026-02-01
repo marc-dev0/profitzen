@@ -97,6 +97,7 @@ public class AnalyticsService : IAnalyticsService
             AddParam(command, "@OneYearAgo", today.AddYears(-1));
 
             decimal todayRevenue = 0, yesterdayRevenue = 0, weekRevenue = 0, lastWeekRevenue = 0, monthRevenue = 0, lastMonthRevenue = 0;
+            decimal todayCost = 0;
             int todaySales = 0, yesterdaySales = 0, lastMonthSalesCount = 0, monthSalesCount = 0;
 
             using (var reader = await command.ExecuteReaderAsync())
@@ -116,6 +117,20 @@ public class AnalyticsService : IAnalyticsService
                 }
             }
 
+            // Get Today's Cost separately to be accurate
+            command.CommandText = @"
+                SELECT COALESCE(SUM(si.""Quantity"" * COALESCE(si.""ConversionToBase"", 1) * (p.""PurchasePrice"" / COALESCE(pu.""ConversionToBase"", 1))), 0)
+                FROM sales.""Sales"" s
+                JOIN sales.""SaleItems"" si ON s.""Id"" = si.""SaleId""
+                JOIN product.""products"" p ON si.""ProductId"" = p.""Id""
+                LEFT JOIN product.""product_purchase_uoms"" pu ON p.""Id"" = pu.""ProductId"" AND pu.""IsDefault"" = true
+                WHERE s.""TenantId"" = @TenantId
+                  AND s.""StoreId"" = @StoreId
+                  AND s.""Status"" = 2
+                  AND s.""SaleDate"" >= @Today AND s.""SaleDate"" < @Tomorrow";
+            
+            todayCost = (decimal)(await command.ExecuteScalarAsync() ?? 0m);
+
             // Calculations
             var revenueGrowth = yesterdayRevenue > 0 ? ((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100 : 0;
             var weekGrowth = lastWeekRevenue > 0 ? ((weekRevenue - lastWeekRevenue) / lastWeekRevenue) * 100 : 0;
@@ -124,18 +139,45 @@ public class AnalyticsService : IAnalyticsService
             var lastMonthAvgTicket = lastMonthSalesCount > 0 ? lastMonthRevenue / lastMonthSalesCount : 0;
             var currentMonthAvgTicket = monthSalesCount > 0 ? monthRevenue / monthSalesCount : 0;
 
+            // Get Customers stats
+            int totalCustomers = 0;
+            int newCustomersThisMonth = 0;
+            command.CommandText = @"
+                SELECT 
+                    (SELECT COUNT(*) FROM customer.""Customers"" WHERE ""TenantId"" = @TenantId),
+                    (SELECT COUNT(*) FROM customer.""Customers"" WHERE ""TenantId"" = @TenantId AND ""CreatedAt"" >= @MonthStart)";
+            
+            using (var reader = await command.ExecuteReaderAsync())
+            {
+                if (await reader.ReadAsync())
+                {
+                    totalCustomers = System.Convert.ToInt32(reader.GetValue(0));
+                    newCustomersThisMonth = System.Convert.ToInt32(reader.GetValue(1));
+                }
+            }
+
             // Chart Data (Last 30 Days)
             var chartSummaries = new List<DailySalesSummaryDto>();
             command.CommandText = @"
                 SELECT 
                     DATE(""SaleDate"" - INTERVAL '5 hours') as SaleDay,
                     COUNT(*),
-                    SUM(""Total"")
-                FROM sales.""Sales""
-                WHERE ""TenantId"" = @TenantId
-                  AND ""StoreId"" = @StoreId
-                  AND ""Status"" = 2
-                  AND ""SaleDate"" >= @Start30Days
+                    SUM(""Total""),
+                    SUM(COALESCE(i_sum.""DayCost"", 0))
+                FROM sales.""Sales"" s
+                LEFT JOIN (
+                    SELECT 
+                        si.""SaleId"", 
+                        SUM(si.""Quantity"" * COALESCE(si.""ConversionToBase"", 1) * (p.""PurchasePrice"" / COALESCE(pu.""ConversionToBase"", 1))) as ""DayCost""
+                    FROM sales.""SaleItems"" si
+                    JOIN product.""products"" p ON si.""ProductId"" = p.""Id""
+                    LEFT JOIN product.""product_purchase_uoms"" pu ON p.""Id"" = pu.""ProductId"" AND pu.""IsDefault"" = true
+                    GROUP BY si.""SaleId""
+                ) i_sum ON s.""Id"" = i_sum.""SaleId""
+                WHERE s.""TenantId"" = @TenantId
+                  AND s.""StoreId"" = @StoreId
+                  AND s.""Status"" = 2
+                  AND s.""SaleDate"" >= @Start30Days
                 GROUP BY DATE(""SaleDate"" - INTERVAL '5 hours')
                 ORDER BY SaleDay";
             
@@ -143,6 +185,9 @@ public class AnalyticsService : IAnalyticsService
             AddParam(command, "@TenantId", tenantId);
             AddParam(command, "@StoreId", storeId);
             AddParam(command, "@Start30Days", startOf30Days);
+            AddParam(command, "@MonthStart", monthStart);
+            AddParam(command, "@Today", today);
+            AddParam(command, "@Tomorrow", tomorrow);
 
             using (var reader = await command.ExecuteReaderAsync())
             {
@@ -151,10 +196,29 @@ public class AnalyticsService : IAnalyticsService
                     var date = reader.GetDateTime(0);
                     var count = System.Convert.ToInt32(reader.GetValue(1));
                     var total = reader.GetDecimal(2);
+                    var cost = reader.GetDecimal(3);
                     
                     chartSummaries.Add(new DailySalesSummaryDto(
-                        Guid.Empty, tenantId, storeId, date, count, total, 0, 0, count > 0 ? total/count : 0, 0, 0
+                        Guid.Empty, tenantId, storeId, date, count, total, cost, total - cost, count > 0 ? total/count : 0, 0, 0
                     ));
+                }
+            }
+            
+            // Get Month Cost and Profit for dashboard
+            command.CommandText = @"
+                SELECT 
+                    COALESCE(SUM(""TotalCost""), 0),
+                    COALESCE(SUM(""TotalProfit""), 0)
+                FROM analytics.""DailySalesSummaries""
+                WHERE ""TenantId"" = @TenantId AND ""StoreId"" = @StoreId AND ""Date"" >= @MonthStart";
+            
+            decimal monthCost = 0, monthProfit = 0;
+            using (var reader = await command.ExecuteReaderAsync())
+            {
+                if (await reader.ReadAsync())
+                {
+                    monthCost = reader.GetDecimal(0);
+                    monthProfit = reader.GetDecimal(1);
                 }
             }
 
@@ -192,9 +256,9 @@ public class AnalyticsService : IAnalyticsService
                         reader.GetGuid(0),
                         reader.GetString(1),
                         reader.GetString(2),
-                        (int)reader.GetDecimal(3), // Quantity might be decimal in DB but DTO expects int? DB is decimal(18,2) usually for quantity? Check SaleItem entity.
+                        System.Convert.ToInt32(reader.GetValue(3)),
                         reader.GetDecimal(4),
-                        0 // Profit not calculated here
+                        0m
                     ));
                 }
             }
@@ -250,8 +314,10 @@ public class AnalyticsService : IAnalyticsService
                 revenueGrowth,
                 todaySales,
                 yesterdaySales,
-                0, 
-                0, 
+                todayCost,
+                todayRevenue - todayCost,
+                totalCustomers,
+                newCustomersThisMonth,
                 currentMonthAvgTicket,
                 lastMonthAvgTicket,
                 weekRevenue,
@@ -260,6 +326,8 @@ public class AnalyticsService : IAnalyticsService
                 monthRevenue,
                 lastMonthRevenue,
                 monthGrowth,
+                monthCost,
+                monthProfit,
                 topProducts,
                 chartSummaries,
                 salesByPaymentMethod,
@@ -299,7 +367,7 @@ public class AnalyticsService : IAnalyticsService
         var totalItems = summaries.Sum(s => s.TotalItems);
         var totalCustomers = summaries.Sum(s => s.TotalCustomers);
 
-        var profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
+        var profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) : 0;
         var averageTicket = totalSales > 0 ? totalRevenue / totalSales : 0;
 
         return new SalesReportDto(
@@ -362,7 +430,7 @@ public class AnalyticsService : IAnalyticsService
                 p.TotalRevenue,
                 p.TotalCost,
                 p.TotalProfit,
-                p.TotalRevenue > 0 ? (p.TotalProfit / p.TotalRevenue) * 100 : 0,
+                p.TotalRevenue > 0 ? (p.TotalProfit / p.TotalRevenue) : 0,
                 p.LastSaleDate,
                 p.DaysSinceLastSale
             ))
@@ -718,12 +786,13 @@ public class AnalyticsService : IAnalyticsService
                 FROM sales.""Sales"" s
                 LEFT JOIN (
                     SELECT 
-                        ""SaleId"", 
-                        SUM(""Quantity"") as ""TotalItems"",
-                        SUM(""Quantity"" * p.""PurchasePrice"") as ""TotalCost"" 
+                        si.""SaleId"", 
+                        SUM(si.""Quantity"") as ""TotalItems"",
+                        SUM(si.""Quantity"" * COALESCE(si.""ConversionToBase"", 1) * (p.""PurchasePrice"" / COALESCE(pu.""ConversionToBase"", 1))) as ""TotalCost"" 
                     FROM sales.""SaleItems"" si
                     JOIN product.""products"" p ON si.""ProductId"" = p.""Id""
-                    GROUP BY ""SaleId""
+                    LEFT JOIN product.""product_purchase_uoms"" pu ON p.""Id"" = pu.""ProductId"" AND pu.""IsDefault"" = true
+                    GROUP BY si.""SaleId""
                 ) i_sum ON s.""Id"" = i_sum.""SaleId""
                 WHERE s.""TenantId"" = @TenantId
                   AND s.""StoreId"" = @StoreId
@@ -736,6 +805,20 @@ public class AnalyticsService : IAnalyticsService
             var insertedSummaries = await command.ExecuteNonQueryAsync();
             _logger.LogInformation("Generated {Count} daily summary rows for store {StoreId}", insertedSummaries, storeId);
 
+            // 2.5 Fix Schema Index (Migrate from old unique constraint to new one including ProductName)
+            try 
+            {
+                await _context.Database.ExecuteSqlRawAsync(@"
+                    DROP INDEX IF EXISTS analytics.""IX_ProductPerformances_TenantId_ProductId"";
+                    CREATE UNIQUE INDEX IF NOT EXISTS ""IX_ProductPerformances_TenantId_ProductId_ProductName"" 
+                    ON analytics.""ProductPerformances"" (""TenantId"", ""ProductId"", ""ProductName"");
+                ");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not update index schema automatically. Ignoring.");
+            }
+
             // 3. Generate Product Performance
             command.CommandText = @"
                 INSERT INTO analytics.""ProductPerformances""
@@ -743,26 +826,28 @@ public class AnalyticsService : IAnalyticsService
                 SELECT
                     gen_random_uuid(),
                     si.""ProductId"",
-                    MAX(si.""ProductCode""),
-                    MAX(si.""ProductName""),
+                    si.""ProductCode"",
+                    si.""ProductName"",
                     @TenantId,
-                    SUM(si.""Quantity""),
-                    SUM(si.""Subtotal""),
-                    SUM(si.""Quantity"" * p.""PurchasePrice""),
-                    SUM(si.""Subtotal"") - SUM(si.""Quantity"" * p.""PurchasePrice""),
+                    COALESCE(SUM(si.""Quantity""), 0),
+                    COALESCE(SUM(si.""Subtotal""), 0),
+                    COALESCE(SUM(si.""Quantity"" * COALESCE(si.""ConversionToBase"", 1) * (COALESCE(p.""PurchasePrice"", 0) / NULLIF(COALESCE(pu.""ConversionToBase"", 1), 0))), 0),
+                    COALESCE(SUM(si.""Subtotal"") - SUM(si.""Quantity"" * COALESCE(si.""ConversionToBase"", 1) * (COALESCE(p.""PurchasePrice"", 0) / NULLIF(COALESCE(pu.""ConversionToBase"", 1), 0))), 0),
                     MAX(s.""SaleDate""),
-                    EXTRACT(DAY FROM NOW() - MAX(s.""SaleDate"")),
+                    CAST(COALESCE(EXTRACT(DAY FROM NOW() - MAX(s.""SaleDate"")), 0) AS INTEGER),
                     NOW(),
                     NOW()
                 FROM sales.""SaleItems"" si
                 JOIN sales.""Sales"" s ON si.""SaleId"" = s.""Id""
-                JOIN product.""products"" p ON si.""ProductId"" = p.""Id""
+                LEFT JOIN product.""products"" p ON si.""ProductId"" = p.""Id""
+                LEFT JOIN product.""product_purchase_uoms"" pu ON p.""Id"" = pu.""ProductId"" AND pu.""IsDefault"" = true
                 WHERE s.""TenantId"" = @TenantId
                   AND s.""Status"" = 2
-                GROUP BY si.""ProductId""
+                GROUP BY si.""ProductId"", si.""ProductCode"", si.""ProductName""
             ";
             
-            await command.ExecuteNonQueryAsync();
+            var performanceRows = await command.ExecuteNonQueryAsync();
+            _logger.LogInformation("Generated {Count} product performance rows for Tenant {TenantId}", performanceRows, tenantId);
         }
         finally
         {
