@@ -116,11 +116,8 @@ public class Sale : BaseEntity
         var payment = new Payment(TenantId, Id, method, amount, reference);
         Payments.Add(payment);
 
-        var totalPaid = Payments.Sum(p => p.Amount);
-        if (Total > 0 && totalPaid >= Total)
-        {
-            Complete();
-        }
+        // Auto-complete has been removed to avoid concurrency issues with sequential API calls.
+        // Completion must be explicitly called via the Service layer.
     }
 
     public void Complete(string? documentSeries = null, string? documentNumber = null)

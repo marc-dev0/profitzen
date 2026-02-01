@@ -78,18 +78,17 @@ public class SalesService : ISalesService
 
     public async Task<SaleDto> CreateSaleAsync(CreateSaleRequest request, Guid storeId, Guid cashierId, string tenantId)
     {
-        _logger.LogInformation("Creating sale for StoreId: {StoreId}, CashierId: {CashierId}, CustomerId: {CustomerId}",
+        _logger.LogInformation("Creating full sale for StoreId: {StoreId}, CashierId: {CashierId}, CustomerId: {CustomerId}",
             storeId, cashierId, request.CustomerId);
 
         try
         {
-
             if (request.CustomerId.HasValue)
             {
                 var existingCustomer = await _context.Customers.FindAsync(request.CustomerId.Value);
                 if (existingCustomer == null)
                 {
-                    _logger.LogInformation("Customer {CustomerId} not found locally. Fetching from Customer Service...", request.CustomerId);
+                    _logger.LogInformation("Customer {CustomerId} not found locally. Fetching...", request.CustomerId);
                     var remoteCustomer = await _customerClient.GetCustomerByIdAsync(request.CustomerId.Value, tenantId);
                     
                     if (remoteCustomer != null)
@@ -106,50 +105,48 @@ public class SalesService : ISalesService
                         );
 
                         if (remoteCustomer.CurrentDebt > 0)
-                        {
                             newLocalCustomer.AddDebt(remoteCustomer.CurrentDebt);
-                        }
                         
-
                         var idProperty = typeof(Customer).GetProperty("Id");
                         if (idProperty != null)
-                        {
                             idProperty.SetValue(newLocalCustomer, remoteCustomer.Id);
-                            _logger.LogInformation("Correctly set Local Customer ID to {Id}", newLocalCustomer.Id);
-                        }
-                        else
-                        {
-                            _logger.LogWarning("Could not find Id property on Customer.");
-                        }
 
                         _context.Customers.Add(newLocalCustomer);
-
                         await _context.SaveChangesAsync();
-                        _logger.LogInformation("Customer {CustomerId} synced successfully with Local ID: {LocalId}", request.CustomerId, newLocalCustomer.Id);
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Customer {CustomerId} not found in Customer Service either. Sale creation might fail if FK is enforced.", request.CustomerId);
                     }
                 }
             }
 
             var sale = new Sale(tenantId, storeId, cashierId, request.CustomerId, request.Notes, request.DocumentType);
-            _logger.LogInformation("Sale entity created with Id: {SaleId}, SaleNumber: {SaleNumber}, DocType: {DocType}",
-                sale.Id, sale.SaleNumber, sale.DocumentType);
+            
+            // Add items if provided
+            if (request.Items != null && request.Items.Any())
+            {
+                foreach (var item in request.Items)
+                {
+                    sale.AddItem(item.ProductId, item.ProductName, item.ProductCode,
+                                item.Quantity, item.UnitPrice, item.DiscountAmount, item.ConversionToBase,
+                                item.UOMId, item.UOMCode);
+                }
+            }
+
+            // Add payments if provided
+            if (request.Payments != null && request.Payments.Any())
+            {
+                foreach (var payment in request.Payments)
+                {
+                    sale.AddPayment(payment.Method, payment.Amount, payment.Reference);
+                }
+            }
 
             _context.Sales.Add(sale);
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Sale saved successfully. SaleId: {SaleId}", sale.Id);
-
-            var result = await GetSaleByIdAsync(sale.Id)
-                ?? throw new InvalidOperationException("Failed to retrieve created sale");
-
             _logger.LogInformation("Sale created successfully. SaleId: {SaleId}, SaleNumber: {SaleNumber}",
-                result.Id, result.SaleNumber);
+                sale.Id, sale.SaleNumber);
 
-            return result;
+            return await GetSaleByIdAsync(sale.Id)
+                ?? throw new InvalidOperationException("Failed to retrieve created sale");
         }
         catch (Exception ex)
         {
@@ -283,6 +280,12 @@ public class SalesService : ISalesService
             throw new InvalidOperationException("Sale not found");
 
 
+        if (sale.Status == SaleStatus.Completed)
+        {
+            _logger.LogInformation("Sale {SaleId} is already completed. Returning current data.", saleId);
+            return await GetSaleByIdAsync(saleId) ?? throw new InvalidOperationException("Failed to retrieve sale");
+        }
+
         var creditPayment = sale.Payments.FirstOrDefault(p => p.Method == PaymentMethod.Credit);
         if (creditPayment != null)
         {
@@ -300,6 +303,8 @@ public class SalesService : ISalesService
              if (!success)
                  throw new InvalidOperationException("Failed to register credit in Customer Service.");
 
+             // Update local replica ONLY if it hasn't been updated yet (idempotency check)
+             // We check the status or just let it update, but we already checked Status == Completed above.
              sale.Customer?.AddDebt(creditPayment.Amount);
         }
 
@@ -347,7 +352,21 @@ public class SalesService : ISalesService
         }
 
         sale.Complete(documentSeries, documentNumber);
-        await _context.SaveChangesAsync();
+        
+        try 
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            _logger.LogWarning(ex, "Concurrency exception occurred while completing sale {SaleId}. Checking if it was already completed by another process.", saleId);
+            var reloadedSale = await _context.Sales.AsNoTracking().FirstOrDefaultAsync(s => s.Id == saleId);
+            if (reloadedSale?.Status != SaleStatus.Completed)
+            {
+                throw; // Rethrow if it's a real unexpected failure
+            }
+            _logger.LogInformation("Sale {SaleId} was already completed successfully.", saleId);
+        }
 
 
         foreach (var item in sale.Items)

@@ -48,7 +48,9 @@ public record PaymentDto(
 public record CreateSaleRequest(
     Guid? CustomerId,
     string? Notes,
-    string? DocumentType = null
+    string? DocumentType = null,
+    List<AddSaleItemRequest>? Items = null,
+    List<AddPaymentRequest>? Payments = null
 );
 
 public record AddSaleItemRequest(

@@ -55,9 +55,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddHttpClient();
 
 // AI - Semantic Kernel with local Ollama
-var ollamaUrl = builder.Configuration["AI__OllamaUrl"] ?? "http://localhost:11434";
+var ollamaUrl = builder.Configuration["AI:OllamaUrl"] ?? "http://localhost:11434";
+var ollamaModel = builder.Configuration["AI:Model"] ?? "llama3";
 builder.Services.AddKernel()
-                .AddOllamaChatCompletion("llama3.2", new Uri(ollamaUrl));
+                .AddOllamaChatCompletion(ollamaModel, new Uri(ollamaUrl));
 
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 builder.Services.AddAuthorization();

@@ -379,49 +379,72 @@ export default function POSPage() {
 
   const selectedCustomer = customers?.find(c => c.id === selectedCustomerId);
 
-  const addToCart = (productId: string, requestedQuantity: number = 1) => {
+  const addToCart = (productId: string, requestedQuantity: number = 1, forceUomId?: string) => {
     const product = products?.find(p => p.id === productId);
     if (!product) return;
 
-    const defaultUOM = getDefaultSaleUOM(product);
-    const existingItemIndex = cart.findIndex(item => item.productId === productId && item.uomId === defaultUOM?.uomId);
-    const existingItem = existingItemIndex !== -1 ? cart[existingItemIndex] : undefined;
+    // 1. Initial choice: Forced UOM or Default UOM
+    let targetUOM = forceUomId
+      ? product.saleUOMs?.find(u => u.uomId === forceUomId)
+      : getDefaultSaleUOM(product);
 
-    // Quantity calculation
-    const currentQuantity = existingItem ? existingItem.quantity : 0;
-    const newQuantity = currentQuantity + requestedQuantity;
-    const conversionToBase = defaultUOM?.conversionToBase || 1;
+    let conversionToBase = targetUOM?.conversionToBase || 1;
+    const currentStock = product.currentStock || 0;
 
-    // STOCK CHECK START
-    const stockUsedByOthers = cart.reduce((acc, item, idx) => {
-      if (item.productId === productId && idx !== existingItemIndex) {
+    // 2. Calculate available stock considering items already in cart
+    const stockUsedByOthers = cart.reduce((acc, item) => {
+      if (item.productId === productId) {
         return acc + (item.quantity * item.conversionToBase);
       }
       return acc;
     }, 0);
 
-    const additionalStockNeeded = newQuantity * conversionToBase;
-    const totalStockNeeded = stockUsedByOthers + additionalStockNeeded;
-    const currentStock = product.currentStock || 0;
+    const availableStockBase = currentStock - stockUsedByOthers;
 
-    if (currentStock < totalStockNeeded) {
-      const availableInThisUOM = Math.floor((currentStock - stockUsedByOthers) / conversionToBase);
-      if (availableInThisUOM <= 0) {
-        toast.error(`Sin stock disponible para ${product.name}.`);
+    if (availableStockBase <= 0) {
+      toast.error(`Sin stock disponible para ${product.name}.`);
+      return;
+    }
+
+    // 3. SMART FALLBACK: If default UOM is not enough for even 1 unit, find the largest UOM that DOES have stock
+    let availableInSelected = Math.floor(availableStockBase / conversionToBase);
+
+    if (availableInSelected <= 0) {
+      const betterUOM = product.saleUOMs
+        ?.filter(u => u.isActive !== false)
+        .sort((a, b) => b.conversionToBase - a.conversionToBase)
+        .find(u => Math.floor(availableStockBase / (u.conversionToBase || 1)) > 0);
+
+      if (betterUOM) {
+        targetUOM = betterUOM;
+        conversionToBase = targetUOM.conversionToBase || 1;
+        availableInSelected = Math.floor(availableStockBase / conversionToBase);
+        toast.info(`Se cambió a ${targetUOM.uomName} por disponibilidad de stock.`);
+      } else {
+        toast.error(`No hay stock suficiente para la unidad de medida disponible.`);
         return;
       }
-      toast.warning(`Stock insuficiente. Solo se agregaron ${availableInThisUOM} ${defaultUOM?.uomName}.`);
-
-      // Ajustar cantidad al máximo disponible
-      const maxPossibleNewQty = currentQuantity + availableInThisUOM;
-      if (maxPossibleNewQty <= currentQuantity) return;
-      // Continue with max available
     }
-    // STOCK CHECK END
 
-    const price = getProductPrice(product, selectedPriceList, defaultUOM?.uomId);
+    // 4. Quantity Adjustment: Don't exceed available stock
+    let finalQuantityToAdd = requestedQuantity;
+    if (availableStockBase < (finalQuantityToAdd * conversionToBase)) {
+      finalQuantityToAdd = Math.floor(availableStockBase / conversionToBase);
+      if (finalQuantityToAdd > 0) {
+        toast.warning(`Stock insuficiente. Solo se agregaron ${finalQuantityToAdd} ${targetUOM?.uomName}.`);
+      }
+    }
+
+    if (finalQuantityToAdd <= 0) return;
+
+    // 5. Finalize adding to cart
+    const price = getProductPrice(product, selectedPriceList, targetUOM?.uomId);
+
+    const existingItemIndex = cart.findIndex(item => item.productId === productId && item.uomId === targetUOM?.uomId);
+    const existingItem = existingItemIndex !== -1 ? cart[existingItemIndex] : undefined;
 
     if (existingItem) {
+      const newQuantity = existingItem.quantity + finalQuantityToAdd;
       setCart(cart.map((item, idx) =>
         idx === existingItemIndex
           ? { ...item, quantity: newQuantity, subtotal: newQuantity * item.price }
@@ -432,22 +455,25 @@ export default function POSPage() {
         productId: product.id,
         productCode: product.code,
         productName: product.name,
-        quantity: requestedQuantity,
+        quantity: finalQuantityToAdd,
         price: price,
-        subtotal: price * requestedQuantity,
+        subtotal: price * finalQuantityToAdd,
         conversionToBase: conversionToBase,
-        uomId: defaultUOM?.uomId || '',
-        uomCode: defaultUOM?.uomCode || 'UND',
-        uomName: defaultUOM?.uomName || 'Unidad',
+        uomId: targetUOM?.uomId || '',
+        uomCode: targetUOM?.uomCode || 'UND',
+        uomName: targetUOM?.uomName || 'Unidad',
       }]);
     }
 
-    // SPEED OPTIMIZATION: Clear search and focus back to input
-    setSearchTerm('');
-    setFocusMode('search');
+    // 6. Focus Management
+    const targetIndex = existingItemIndex !== -1 ? existingItemIndex : cart.length;
+    setFocusMode('cart');
+    setSelectedCartIndex(targetIndex);
+
     setTimeout(() => {
-      searchInputRef.current?.focus();
-    }, 10);
+      quantityInputRefs.current[targetIndex]?.focus();
+      quantityInputRefs.current[targetIndex]?.select();
+    }, 50);
   };
 
   const updateCartItemUOM = (productId: string, currentUomId: string, newUomId: string) => {
@@ -635,42 +661,36 @@ export default function POSPage() {
     setSuccessMessage('');
 
     try {
-      // Step 1: Create the sale
-      const createSaleResponse = await apiClient.post('/api/sales', {
-        customerId: selectedCustomerId || null,
-        notes: null,
-        documentType: documentType
-      });
-
-      const saleId = createSaleResponse.data.id;
-
-      // Step 2: Add items to the sale (Bulk)
-      const itemsPayload = cart.map(item => ({
-        productId: item.productId,
-        productName: `${item.productName}${item.uomName ? ` (${item.uomName})` : ''}`,
-        productCode: item.productCode,
-        quantity: item.quantity,
-        unitPrice: item.price,
-        discountAmount: 0,
-        conversionToBase: item.conversionToBase,
-        uomId: item.uomId || null,
-        uomCode: item.uomCode || null
-      }));
-
-      const itemsResponse = await apiClient.post(`/api/sales/${saleId}/items/bulk`, itemsPayload);
-      const saleWithItems = itemsResponse.data;
-
-      // Step 3: Add payment
+      // ATOMIC OPERATION: Create full sale with items and payments in one go
       const selectedMethod = BusinessConfig.payment.methods.find(m => m.name === paymentMethod);
 
-      await apiClient.post(`/api/sales/${saleId}/payments`, {
-        method: selectedMethod?.id || 1,
-        amount: saleWithItems.total,
-        reference: null
-      });
+      const payload = {
+        customerId: selectedCustomerId || null,
+        notes: null,
+        documentType: documentType,
+        items: cart.map(item => ({
+          productId: item.productId,
+          productName: `${item.productName}${item.uomName ? ` (${item.uomName})` : ''}`,
+          productCode: item.productCode,
+          quantity: item.quantity,
+          unitPrice: item.price,
+          discountAmount: 0,
+          conversionToBase: item.conversionToBase,
+          uomId: item.uomId || null,
+          uomCode: item.uomCode || null
+        })),
+        payments: [{
+          method: selectedMethod?.id || 1,
+          amount: calculateTotal(),
+          reference: null
+        }]
+      };
 
-      // Step 4: Complete the sale
-      const completedSale = await apiClient.post(`/api/sales/${saleId}/complete`);
+      const createResponse = await apiClient.post('/api/sales', payload);
+      const saleWithId = createResponse.data;
+
+      // Final Step: Complete the sale (this handles stock and document numbers)
+      const completedSale = await apiClient.post(`/api/sales/${saleWithId.id}/complete`);
 
       const saleData = {
         ...completedSale.data,
@@ -700,7 +720,6 @@ export default function POSPage() {
       setCart([]);
       setAmountReceived('');
       setPaymentMethod('Efectivo');
-      setPaymentMethod('Efectivo');
       setSelectedCustomerId(''); // Clear customer after sale
 
       // Reset Search & Focus UI
@@ -709,9 +728,7 @@ export default function POSPage() {
       setShowProductGrid(false);
 
       // Focus on search input for next sale
-      setTimeout(() => {
-        searchInputRef.current?.focus();
-      }, 100);
+      setTimeout(() => { searchInputRef.current?.focus(); }, 100);
 
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['store-inventory'] });
@@ -905,9 +922,11 @@ export default function POSPage() {
                           // Priority 2: If only one result, add it
                           addToCart(filteredProducts[0].id, quantityToAdd);
                         } else {
-                          // Priority 3: Multiple results, move focus to products
-                          setFocusMode('products');
-                          setSelectedProductIndex(0);
+                          // Priority 3: Use the CURRENTLY SELECTED product (navigation with arrows)
+                          const currentSelected = filteredProducts[selectedProductIndex];
+                          if (currentSelected) {
+                            addToCart(currentSelected.id, quantityToAdd);
+                          }
                         }
                       }
                     }
@@ -944,8 +963,16 @@ export default function POSPage() {
                 <div
                   ref={productsContainerRef}
                   tabIndex={-1}
-                  className="mt-4 max-h-[500px] overflow-y-auto focus:outline-none"
+                  className="mt-4 max-h-[520px] overflow-y-auto overflow-x-hidden focus:outline-none pr-1 custom-scrollbar"
                 >
+                  <div className="flex justify-between items-center mb-2 px-1">
+                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-2">
+                      <span className="bg-primary/20 text-primary px-1 rounded font-bold">↵ Enter</span> para unidad pdt.
+                    </p>
+                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-2">
+                      <span className="bg-primary/20 text-primary px-1 rounded font-bold">Click</span> en etiqueta para unidad específica
+                    </p>
+                  </div>
                   {filteredProducts && filteredProducts.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {filteredProducts.map((product, index) => {
@@ -981,23 +1008,42 @@ export default function POSPage() {
                                   {product.name}
                                 </p>
                                 <p className="text-sm text-muted-foreground mt-1">Código: {product.code}</p>
-                                <div className="mt-1 space-y-0.5">
-                                  <p className={`text-xs font-bold ${isOutOfStock ? 'text-red-500' : isLowStock ? 'text-orange-500' : 'text-primary'}`}>
-                                    Stock Disponible:
-                                  </p>
-                                  <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                                <div className="mt-1 space-y-1">
+                                  <div className="flex justify-between items-center">
+                                    <p className={`text-xs font-bold ${isOutOfStock ? 'text-red-500' : isLowStock ? 'text-orange-500' : 'text-primary'}`}>
+                                      Stock Disponible:
+                                    </p>
+                                    {isSelected && !isOutOfStock && (
+                                      <span className="text-[9px] text-primary animate-pulse font-bold uppercase tracking-wider bg-primary/20 px-1.5 py-0.5 rounded">
+                                        Click para seleccionar unidad ↓
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-wrap gap-x-2 gap-y-1.5">
                                     {product.saleUOMs?.filter(uom => uom.isActive !== false).map(uom => {
                                       const convertedStock = Math.floor(effectiveStock / (uom.conversionToBase || 1));
+                                      const hasStockInUOM = convertedStock > 0;
                                       return (
-                                        <span key={uom.uomId} className="text-[10px] bg-muted px-1.5 py-0.5 rounded border border-border text-muted-foreground whitespace-nowrap">
+                                        <button
+                                          key={uom.uomId}
+                                          disabled={!hasStockInUOM}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            addToCart(product.id, 1, uom.uomId);
+                                          }}
+                                          className={`text-[10px] px-2.5 py-1.5 rounded-md border whitespace-nowrap font-bold transition-all shadow-sm ${hasStockInUOM
+                                            ? 'bg-slate-800 text-slate-100 border-slate-600 hover:bg-primary hover:border-primary hover:scale-105 active:scale-95 cursor-pointer'
+                                            : 'bg-muted/10 text-muted-foreground/30 border-border/10 cursor-not-allowed'
+                                            }`}
+                                        >
                                           {convertedStock} {uom.uomName}
-                                        </span>
+                                        </button>
                                       );
                                     })}
                                     {/* Always show base units if not already shown */}
                                     {product.saleUOMs?.every(uom => uom.conversionToBase !== 1) && (
-                                      <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded border border-border text-muted-foreground whitespace-nowrap">
-                                        {effectiveStock} UND (Base)
+                                      <span className="text-[10px] bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded border border-slate-700 whitespace-nowrap font-medium">
+                                        {effectiveStock} UND
                                       </span>
                                     )}
                                   </div>
@@ -1009,9 +1055,9 @@ export default function POSPage() {
                                 </p>
                                 <p className="text-xs text-muted-foreground">{getDefaultUOMName(product)}</p>
                                 {isOutOfStock ? (
-                                  <span className="text-xs text-red-600 bg-red-100 dark:bg-red-900/30 dark:text-red-400 px-2 py-1 rounded-full mt-1 inline-block font-semibold">Sin Stock</span>
+                                  <span className="text-[10px] text-red-600 bg-red-100 px-2 py-0.5 rounded font-bold uppercase">Sin Stock</span>
                                 ) : (
-                                  <span className="text-xs text-green-700 bg-green-100 dark:bg-green-900/30 dark:text-green-400 px-2 py-1 rounded-full mt-1 inline-block">Disponible</span>
+                                  <span className="text-[10px] text-green-700 bg-green-100 px-2 py-0.5 rounded font-bold uppercase border border-green-200">Disponible</span>
                                 )}
                               </div>
                             </div>
@@ -1106,10 +1152,9 @@ export default function POSPage() {
                 <>
                   <div className="mb-4 max-h-[500px] overflow-y-auto border border-border rounded-xl">
                     <div className="grid grid-cols-12 gap-1 px-4 py-2 border-b bg-muted/50 text-[10px] font-bold text-muted-foreground uppercase tracking-wider sticky top-0 z-10">
-                      <div className="col-span-2">Cantidad</div>
-                      <div className="col-span-6">Producto / Unidad</div>
+                      <div className="col-span-2">Cant.</div>
+                      <div className="col-span-7">Producto / Unidad</div>
                       <div className="col-span-3 text-right">Total</div>
-                      <div className="col-span-1"></div>
                     </div>
                     {cart.map((item, index) => {
                       const product = products?.find(p => p.id === item.productId);
@@ -1121,13 +1166,13 @@ export default function POSPage() {
                           key={`${item.productId}-${item.uomId}`}
                           ref={(el) => { cartItemRefs.current[index] = el; }}
                           onClick={() => { setFocusMode('cart'); setSelectedCartIndex(index); }}
-                          className={`grid grid-cols-12 gap-1 items-center px-4 py-2 border-b transition-colors cursor-pointer group ${isSelected
-                            ? 'bg-primary/10 border-primary/30 z-20 relative'
-                            : 'bg-background hover:bg-muted/30 border-border'
+                          className={`grid grid-cols-12 gap-3 items-center px-4 py-3 border-b transition-all cursor-pointer group ${isSelected
+                            ? 'bg-primary/5 dark:bg-primary/10 border-l-4 border-l-primary z-20 relative ring-1 ring-primary/20 shadow-sm'
+                            : 'bg-background hover:bg-muted/20 border-border'
                             }`}
                         >
-                          {/* Columna Cantidad - Más espacio y estilizado */}
-                          <div className="col-span-2 flex items-center gap-1">
+                          {/* Columna Cantidad */}
+                          <div className="col-span-2">
                             <input
                               ref={(el) => { quantityInputRefs.current[index] = el; }}
                               type="text"
@@ -1135,79 +1180,65 @@ export default function POSPage() {
                               value={item.quantity === 0 ? '' : item.quantity}
                               onChange={(e) => {
                                 const val = e.target.value;
-                                if (val === '') {
-                                  updateQuantity(item.productId, item.uomId, 0);
-                                  return;
-                                }
+                                if (val === '') { updateQuantity(item.productId, item.uomId, 0); return; }
                                 const parsed = parseInt(val);
-                                if (!isNaN(parsed)) {
-                                  updateQuantity(item.productId, item.uomId, Math.max(0, parsed));
+                                if (!isNaN(parsed)) updateQuantity(item.productId, item.uomId, Math.max(0, parsed));
+                              }}
+                              onFocus={(e) => { e.target.select(); setFocusMode('cart'); setSelectedCartIndex(index); }}
+                              className="w-full text-center font-bold text-foreground bg-muted/50 border border-transparent hover:border-border focus:border-primary rounded px-1 py-1 text-sm shadow-inner"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  setSearchTerm('');
+                                  setFocusMode('search');
+                                  setTimeout(() => searchInputRef.current?.focus(), 10);
                                 }
                               }}
-                              onFocus={(e) => e.target.select()}
-                              className="w-full text-center font-bold text-foreground bg-muted/50 border border-transparent hover:border-border focus:border-primary rounded px-1 py-1 text-sm shadow-inner"
                             />
-                            <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                onClick={(e) => { e.stopPropagation(); updateQuantity(item.productId, item.uomId, item.quantity + 1); }}
-                                className="w-4 h-3.5 bg-primary/20 hover:bg-primary/40 rounded flex items-center justify-center text-[8px]"
-                              >
-                                ▲
-                              </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); updateQuantity(item.productId, item.uomId, item.quantity - 1); }}
-                                className="w-4 h-3.5 bg-muted hover:bg-muted/80 rounded flex items-center justify-center text-[8px]"
-                              >
-                                ▼
-                              </button>
-                            </div>
                           </div>
 
-                          {/* Columna Producto */}
-                          <div className="col-span-6 overflow-hidden px-1">
-                            <p className={`font-bold leading-tight truncate text-sm ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+                          {/* Columna Producto - Más espacio (col-span-7) */}
+                          <div className="col-span-7 overflow-hidden px-1">
+                            <p className={`font-bold leading-tight truncate text-sm mb-1 ${isSelected ? 'text-primary' : 'text-foreground'}`}>
                               {item.productName}
                             </p>
-
-                            <div className="flex items-center gap-1 mt-0.5">
+                            <div className="flex items-center gap-2">
                               {availableUOMs.length > 1 ? (
                                 <select
                                   value={item.uomId}
                                   onChange={(e) => updateCartItemUOM(item.productId, item.uomId, e.target.value)}
                                   onClick={(e) => e.stopPropagation()}
-                                  className="text-[10px] bg-muted/60 border-0 rounded px-1 text-muted-foreground focus:ring-1 focus:ring-primary h-4 leading-none"
+                                  className="text-[11px] bg-muted/80 border border-border/50 rounded-md px-2 py-1 text-foreground focus:ring-1 focus:ring-primary h-7 min-w-[130px] transition-all cursor-pointer outline-none font-medium"
                                 >
                                   {availableUOMs.map(uom => (
-                                    <option key={uom.uomId} value={uom.uomId}>
+                                    <option key={uom.uomId} value={uom.uomId} className="bg-popover text-popover-foreground">
                                       {uom.uomName} (S/ {getProductPrice(product!, selectedPriceList, uom.uomId).toFixed(2)})
                                     </option>
                                   ))}
                                 </select>
                               ) : (
-                                <span className="text-[10px] text-muted-foreground uppercase font-medium">
+                                <span className="text-[11px] text-muted-foreground uppercase font-bold bg-muted/50 px-2 py-0.5 rounded border border-border/20">
                                   {item.uomName} · S/ {item.price.toFixed(2)}
                                 </span>
                               )}
                             </div>
                           </div>
 
-                          {/* Columna Total */}
-                          <div className="col-span-3 text-right">
-                            <p className={`text-sm font-bold ${isSelected ? 'text-primary' : 'text-foreground'}`}>
-                              {formatCurrency(item.subtotal)}
-                            </p>
-                          </div>
-
-                          {/* Columna Acción */}
-                          <div className="col-span-1 text-right">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); removeFromCart(item.productId, item.uomId); }}
-                              className="text-muted-foreground hover:text-destructive p-1 rounded transition-colors"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
+                          {/* Columna Total y Eliminar */}
+                          <div className="col-span-3">
+                            <div className="flex flex-col items-end">
+                              <p className={`text-sm font-bold ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+                                {formatCurrency(item.subtotal)}
+                              </p>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); removeFromCart(item.productId, item.uomId); }}
+                                className="text-muted-foreground hover:text-destructive p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
                           </div>
                         </div>
                       );
