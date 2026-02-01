@@ -147,6 +147,7 @@ services:
       - Services__ApiKey=${SERVICE_KEY}
       - Serilog__WriteTo__2__Args__serverUrl=http://seq-demo:5341
       - AI__OllamaUrl=http://host.docker.internal:11434
+      - AI:Model=llama3.2
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -194,7 +195,7 @@ services:
     networks:
       - profitzen-demo-network
     command: >
-      sh -c "sleep 10 && curl -X POST http://ollama-demo:11434/api/pull -d '{\"name\": \"llama3\"}'"
+      sh -c "sleep 10 && curl -X POST http://ollama-demo:11434/api/pull -d '{\"name\": \"llama3.2\"}'"
 
   seq-demo:
     image: datalust/seq:latest
