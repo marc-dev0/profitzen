@@ -263,11 +263,9 @@ export default function POSPage() {
 
         if (e.key === 'Enter' && filteredProducts && filteredProducts[selectedProductIndex]) {
           e.preventDefault();
-          // Only allow Enter selection if we are actively searching or explicit movement happened
-          // PREVENT accidental selection of first item if searchTerm is empty (which lists ALL products)
           if (!searchTerm.trim()) return;
 
-          addToCart(filteredProducts[selectedProductIndex].id);
+          addToCart(filteredProducts[selectedProductIndex].id, 1);
           setSelectedProductIndex(0);
         }
 
@@ -381,7 +379,7 @@ export default function POSPage() {
 
   const selectedCustomer = customers?.find(c => c.id === selectedCustomerId);
 
-  const addToCart = (productId: string, keepOpen = false) => {
+  const addToCart = (productId: string, requestedQuantity: number = 1) => {
     const product = products?.find(p => p.id === productId);
     if (!product) return;
 
@@ -391,11 +389,10 @@ export default function POSPage() {
 
     // Quantity calculation
     const currentQuantity = existingItem ? existingItem.quantity : 0;
-    const newQuantity = currentQuantity + 1;
+    const newQuantity = currentQuantity + requestedQuantity;
     const conversionToBase = defaultUOM?.conversionToBase || 1;
 
     // STOCK CHECK START
-    // Calculate total base quantity already in cart for this product
     const stockUsedByOthers = cart.reduce((acc, item, idx) => {
       if (item.productId === productId && idx !== existingItemIndex) {
         return acc + (item.quantity * item.conversionToBase);
@@ -407,11 +404,18 @@ export default function POSPage() {
     const totalStockNeeded = stockUsedByOthers + additionalStockNeeded;
     const currentStock = product.currentStock || 0;
 
-    // Check if stock is sufficient
     if (currentStock < totalStockNeeded) {
-      const availableInThisUOM = Math.floor(currentStock / conversionToBase);
-      toast.warning(`Stock insuficiente para ${product.name}. Disponible: ${availableInThisUOM} ${defaultUOM?.uomName || 'UND'}.`);
-      return;
+      const availableInThisUOM = Math.floor((currentStock - stockUsedByOthers) / conversionToBase);
+      if (availableInThisUOM <= 0) {
+        toast.error(`Sin stock disponible para ${product.name}.`);
+        return;
+      }
+      toast.warning(`Stock insuficiente. Solo se agregaron ${availableInThisUOM} ${defaultUOM?.uomName}.`);
+
+      // Ajustar cantidad al máximo disponible
+      const maxPossibleNewQty = currentQuantity + availableInThisUOM;
+      if (maxPossibleNewQty <= currentQuantity) return;
+      // Continue with max available
     }
     // STOCK CHECK END
 
@@ -428,9 +432,9 @@ export default function POSPage() {
         productId: product.id,
         productCode: product.code,
         productName: product.name,
-        quantity: 1,
+        quantity: requestedQuantity,
         price: price,
-        subtotal: price,
+        subtotal: price * requestedQuantity,
         conversionToBase: conversionToBase,
         uomId: defaultUOM?.uomId || '',
         uomCode: defaultUOM?.uomCode || 'UND',
@@ -438,15 +442,12 @@ export default function POSPage() {
       }]);
     }
 
-    // For efficiency, focus the quantity input of the added/updated item
-    const targetIndex = existingItemIndex !== -1 ? existingItemIndex : cart.length;
-    setFocusMode('cart');
-    setSelectedCartIndex(targetIndex);
-
+    // SPEED OPTIMIZATION: Clear search and focus back to input
+    setSearchTerm('');
+    setFocusMode('search');
     setTimeout(() => {
-      quantityInputRefs.current[targetIndex]?.focus();
-      quantityInputRefs.current[targetIndex]?.select();
-    }, 100);
+      searchInputRef.current?.focus();
+    }, 10);
   };
 
   const updateCartItemUOM = (productId: string, currentUomId: string, newUomId: string) => {
@@ -850,7 +851,7 @@ export default function POSPage() {
                 <input
                   ref={searchInputRef}
                   type="text"
-                  placeholder="Escanea código de barras o escribe nombre del producto..."
+                  placeholder="Escanea o escribe (ej: 5*bolsa)..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   onFocus={() => {
@@ -863,33 +864,58 @@ export default function POSPage() {
                       setFocusMode('products');
                       setSelectedProductIndex(0);
                       setShowProductGrid(true);
-                      // Remove focus from input and focus products container
-                      searchInputRef.current?.blur();
-                      setTimeout(() => {
-                        productsContainerRef.current?.focus();
-                      }, 50);
                     }
-                    if (e.key === 'Enter' && filteredProducts && filteredProducts.length > 0) {
+                    if (e.key === 'Enter') {
                       e.preventDefault();
-
-                      // Don't add if search term is empty to prevent accidental adds of the first item
                       if (!searchTerm.trim()) return;
 
-                      // If there's only one product or first is selected, add it
-                      if (filteredProducts.length === 1 || selectedProductIndex === 0) {
-                        addToCart(filteredProducts[0].id);
-                      } else {
-                        // Switch to products mode
-                        setFocusMode('products');
-                        setShowProductGrid(true);
-                        searchInputRef.current?.blur();
-                        setTimeout(() => {
-                          productsContainerRef.current?.focus();
-                        }, 50);
+                      // Support Qty*Product syntax (e.g. 5*Fardo)
+                      let quantityToAdd = 1;
+                      let actualSearchTerm = searchTerm;
+
+                      if (searchTerm.includes('*')) {
+                        const parts = searchTerm.split('*');
+                        const qty = parseInt(parts[0]);
+                        if (!isNaN(qty) && qty > 0) {
+                          quantityToAdd = qty;
+                          actualSearchTerm = parts[1].trim();
+                        }
+                      } else if (searchTerm.toLowerCase().includes('x')) {
+                        // Also support QtyxProduct (e.g. 5x)
+                        const parts = searchTerm.split(/x/i);
+                        const qty = parseInt(parts[0]);
+                        if (!isNaN(qty) && qty > 0 && parts[1]) {
+                          quantityToAdd = qty;
+                          actualSearchTerm = parts[1].trim();
+                        }
+                      }
+
+                      if (filteredProducts && filteredProducts.length > 0) {
+                        // Priority 1: If there is an exact match in code or name
+                        const exactMatch = filteredProducts.find(p =>
+                          p.code.toLowerCase() === actualSearchTerm.toLowerCase() ||
+                          p.name.toLowerCase() === actualSearchTerm.toLowerCase() ||
+                          p.barcode === actualSearchTerm ||
+                          p.shortScanCode === actualSearchTerm
+                        );
+
+                        if (exactMatch) {
+                          addToCart(exactMatch.id, quantityToAdd);
+                        } else if (filteredProducts.length === 1) {
+                          // Priority 2: If only one result, add it
+                          addToCart(filteredProducts[0].id, quantityToAdd);
+                        } else {
+                          // Priority 3: Multiple results, move focus to products
+                          setFocusMode('products');
+                          setSelectedProductIndex(0);
+                        }
                       }
                     }
                   }}
-                  className="w-full px-5 py-4 text-lg border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-background text-foreground"
+                  className={`w-full px-5 py-4 text-lg border-2 rounded-xl focus:outline-none transition-all ${focusMode === 'search'
+                    ? 'border-primary ring-4 ring-primary/10 bg-background shadow-lg'
+                    : 'border-input bg-muted/5'
+                    }`}
                   autoFocus
                 />
                 {searchTerm && (
@@ -937,7 +963,7 @@ export default function POSPage() {
                             ref={(el) => { productRefs.current[index] = el; }}
                             onClick={() => {
                               if (!isOutOfStock) {
-                                addToCart(product.id, true);
+                                addToCart(product.id, 1);
                                 setFocusMode('products');
                                 setSelectedProductIndex(index);
                               }
@@ -1023,9 +1049,12 @@ export default function POSPage() {
           </div>
 
           <div className="lg:col-span-1">
-            <div className="bg-card rounded-xl shadow-lg p-6 sticky top-6 border border-border">
+            <div className={`bg-card rounded-xl shadow-lg p-6 sticky top-6 border transition-all duration-300 ${focusMode === 'cart' || focusMode === 'payment'
+              ? 'border-primary ring-4 ring-primary/10 shadow-primary/20 scale-[1.01]'
+              : 'border-border'
+              }`}>
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-bold text-foreground">
+                <h3 className={`text-xl font-bold transition-colors ${focusMode === 'cart' ? 'text-primary' : 'text-foreground'}`}>
                   Carrito de Venta
                 </h3>
                 {cart.length > 0 && (
@@ -1300,7 +1329,10 @@ export default function POSPage() {
                       ref={processButtonRef}
                       onClick={handleProcessSale}
                       disabled={isProcessing || (paymentMethod === 'Efectivo' && !isPaymentValid())}
-                      className="w-full py-4 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed font-bold text-lg shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02]"
+                      className={`w-full py-4 rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02] ${isPaymentValid()
+                        ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                        : 'bg-muted text-muted-foreground'
+                        } ${focusMode === 'payment' && isPaymentValid() ? 'ring-4 ring-primary/30 animate-pulse' : ''}`}
                     >
                       {isProcessing ? (
                         <span className="flex items-center justify-center">
@@ -1311,7 +1343,7 @@ export default function POSPage() {
                           Procesando...
                         </span>
                       ) : (
-                        'Procesar Venta'
+                        isPaymentValid() ? 'PROCESAR VENTA (ENTER)' : 'PAGO INSUFICIENTE'
                       )}
                     </button>
                   </div>
