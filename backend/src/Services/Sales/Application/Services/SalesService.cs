@@ -982,6 +982,11 @@ public class SalesService : ISalesService
                     else if (sale.DocumentType == "03") docTypeName = "BOLETA DE VENTA";
                     else if (sale.DocumentType == "80") docTypeName = "NOTA DE VENTA";
 
+                    if (sale.Status == SaleStatus.Refunded)
+                    {
+                        col.Item().PaddingVertical(2).AlignCenter().Background(Colors.Red.Lighten4).Padding(2).Text("DOCUMENTO ANULADO / DEVUELTO").Style(headerStyle.FontColor(Colors.Red.Medium));
+                    }
+
                     col.Item().AlignCenter().Text(docTypeName).Style(headerStyle);
                     
                     var docNumberText = !string.IsNullOrEmpty(sale.DocumentNumber) 
