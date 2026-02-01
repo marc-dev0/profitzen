@@ -1076,10 +1076,10 @@ export default function POSPage() {
               ) : (
                 <>
                   <div className="mb-4 max-h-[500px] overflow-y-auto border border-border rounded-xl">
-                    <div className="grid grid-cols-12 gap-2 px-4 py-2 border-b bg-muted/50 text-[10px] font-bold text-muted-foreground uppercase tracking-wider sticky top-0 z-10">
-                      <div className="col-span-1">Cant.</div>
-                      <div className="col-span-6">Producto</div>
-                      <div className="col-span-4 text-right">Total</div>
+                    <div className="grid grid-cols-12 gap-1 px-4 py-2 border-b bg-muted/50 text-[10px] font-bold text-muted-foreground uppercase tracking-wider sticky top-0 z-10">
+                      <div className="col-span-2">Cantidad</div>
+                      <div className="col-span-6">Producto / Unidad</div>
+                      <div className="col-span-3 text-right">Total</div>
                       <div className="col-span-1"></div>
                     </div>
                     {cart.map((item, index) => {
@@ -1092,13 +1092,13 @@ export default function POSPage() {
                           key={`${item.productId}-${item.uomId}`}
                           ref={(el) => { cartItemRefs.current[index] = el; }}
                           onClick={() => { setFocusMode('cart'); setSelectedCartIndex(index); }}
-                          className={`grid grid-cols-12 gap-2 items-center px-4 py-2 border-b transition-colors cursor-pointer group ${isSelected
+                          className={`grid grid-cols-12 gap-1 items-center px-4 py-2 border-b transition-colors cursor-pointer group ${isSelected
                             ? 'bg-primary/10 border-primary/30 z-20 relative'
                             : 'bg-background hover:bg-muted/30 border-border'
                             }`}
                         >
-                          {/* Columna Cantidad */}
-                          <div className="col-span-1 flex flex-col items-center">
+                          {/* Columna Cantidad - Más espacio y estilizado */}
+                          <div className="col-span-2 flex items-center gap-1">
                             <input
                               ref={(el) => { quantityInputRefs.current[index] = el; }}
                               type="text"
@@ -1116,26 +1116,26 @@ export default function POSPage() {
                                 }
                               }}
                               onFocus={(e) => e.target.select()}
-                              className="w-full text-center font-bold text-foreground bg-transparent border-0 focus:ring-0 p-0 text-sm"
+                              className="w-full text-center font-bold text-foreground bg-muted/50 border border-transparent hover:border-border focus:border-primary rounded px-1 py-1 text-sm shadow-inner"
                             />
-                            <div className="flex flex-col gap-0.5 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                               <button
                                 onClick={(e) => { e.stopPropagation(); updateQuantity(item.productId, item.uomId, item.quantity + 1); }}
-                                className="w-4 h-4 rounded-full bg-primary/20 hover:bg-primary/40 flex items-center justify-center text-[10px] font-bold"
+                                className="w-4 h-3.5 bg-primary/20 hover:bg-primary/40 rounded flex items-center justify-center text-[8px]"
                               >
-                                +
+                                ▲
                               </button>
                               <button
                                 onClick={(e) => { e.stopPropagation(); updateQuantity(item.productId, item.uomId, item.quantity - 1); }}
-                                className="w-4 h-4 rounded-full bg-muted hover:bg-muted/80 flex items-center justify-center text-[10px] font-bold"
+                                className="w-4 h-3.5 bg-muted hover:bg-muted/80 rounded flex items-center justify-center text-[8px]"
                               >
-                                −
+                                ▼
                               </button>
                             </div>
                           </div>
 
                           {/* Columna Producto */}
-                          <div className="col-span-6 overflow-hidden">
+                          <div className="col-span-6 overflow-hidden px-1">
                             <p className={`font-bold leading-tight truncate text-sm ${isSelected ? 'text-primary' : 'text-foreground'}`}>
                               {item.productName}
                             </p>
@@ -1146,7 +1146,7 @@ export default function POSPage() {
                                   value={item.uomId}
                                   onChange={(e) => updateCartItemUOM(item.productId, item.uomId, e.target.value)}
                                   onClick={(e) => e.stopPropagation()}
-                                  className="text-[10px] bg-muted/50 border-0 rounded p-0 text-muted-foreground focus:ring-0 focus:text-foreground h-4 leading-none"
+                                  className="text-[10px] bg-muted/60 border-0 rounded px-1 text-muted-foreground focus:ring-1 focus:ring-primary h-4 leading-none"
                                 >
                                   {availableUOMs.map(uom => (
                                     <option key={uom.uomId} value={uom.uomId}>
@@ -1163,8 +1163,8 @@ export default function POSPage() {
                           </div>
 
                           {/* Columna Total */}
-                          <div className="col-span-4 text-right">
-                            <p className="text-sm font-bold text-foreground">
+                          <div className="col-span-3 text-right">
+                            <p className={`text-sm font-bold ${isSelected ? 'text-primary' : 'text-foreground'}`}>
                               {formatCurrency(item.subtotal)}
                             </p>
                           </div>
