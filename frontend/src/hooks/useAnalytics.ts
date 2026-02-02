@@ -40,6 +40,18 @@ export function useProductPerformance(storeId?: string) {
   });
 }
 
+export function useSmartSummaries(count: number = 5, storeId?: string, type?: string) {
+  return useQuery<any[]>({
+    queryKey: ['smart-summaries', storeId, count, type],
+    queryFn: async () => {
+      const typeQuery = type ? `&type=${type}` : '';
+      const response = await apiClient.get(`/api/analytics/summaries/latest?count=${count}${storeId ? `&storeId=${storeId}` : ''}${typeQuery}`);
+      return response.data;
+    },
+    enabled: !!storeId,
+  });
+}
+
 export function useRecalculateAnalytics() {
   return useMutation({
     mutationFn: async (storeId?: string) => {

@@ -36,6 +36,24 @@
       }
     },
     {
+      "DownstreamPathTemplate": "/api/permissions/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 5000
+        }
+      ],
+      "UpstreamPathTemplate": "/api/permissions/{everything}",
+      "UpstreamHttpMethod": [
+        "GET",
+        "PUT"
+      ],
+      "AuthenticationOptions": {
+        "AuthenticationProviderKey": "Bearer"
+      }
+    },
+    {
       "DownstreamPathTemplate": "/api/inventory/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [

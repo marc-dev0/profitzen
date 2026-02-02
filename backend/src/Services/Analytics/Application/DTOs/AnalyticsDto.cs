@@ -130,6 +130,15 @@ public record SuggestedPurchaseDto(
     string Reason
 );
 
+public record SmartSummaryDto(
+    Guid Id,
+    string Section,
+    string Content,
+    string Type,
+    DateTime CreatedAt,
+    bool IsRead
+);
+
 public record InventoryInsightReportDto(
     List<RiskAssessmentDto> AtRiskProducts,
     List<ProductPerformanceDto> DeadStock,

@@ -145,4 +145,13 @@ public class AnalyticsController : ControllerBase
             return BadRequest(new { error = "An error occurred while generating summaries." });
         }
     }
+
+    [HttpGet("summaries/latest")]
+    public async Task<IActionResult> GetLatestSummaries([FromQuery] int count = 5, [FromQuery] string? type = null)
+    {
+        var tenantId = GetCurrentTenantId();
+        var storeId = GetCurrentStoreId();
+        var summaries = await _analyticsService.GetLatestSummariesAsync(tenantId, storeId, count, type);
+        return Ok(summaries);
+    }
 }

@@ -9,12 +9,28 @@ public class AnalyticsDbContext : DbContext
     {
     }
 
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        // Suppress the warning about pending model changes since we're handling schema manually in Demo
+        optionsBuilder.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+        base.OnConfiguring(optionsBuilder);
+    }
+
     public DbSet<DailySalesSummary> DailySalesSummaries { get; set; }
     public DbSet<ProductPerformance> ProductPerformances { get; set; }
+    public DbSet<SmartSummary> SmartSummaries { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("analytics");
+
+        modelBuilder.Entity<SmartSummary>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).HasMaxLength(450).IsRequired();
+            entity.HasIndex(e => new { e.TenantId, e.StoreId, e.Date });
+            entity.HasIndex(e => e.CreatedAt);
+        });
 
         modelBuilder.Entity<DailySalesSummary>(entity =>
         {
@@ -45,6 +61,14 @@ public class AnalyticsDbContext : DbContext
             entity.HasIndex(e => e.TenantId);
             entity.HasIndex(e => e.TotalRevenue);
             entity.HasIndex(e => e.LastSaleDate);
+        });
+
+        modelBuilder.Entity<SmartSummary>(entity =>
+        {
+            entity.ToTable("SmartSummaries", "analytics");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.TenantId, e.StoreId, e.Date });
+            entity.HasIndex(e => e.CreatedAt);
         });
 
         base.OnModelCreating(modelBuilder);

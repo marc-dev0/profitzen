@@ -107,21 +107,63 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-using (var scope = app.Services.CreateScope())
-{
-    var context = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+    using (var scope = app.Services.CreateScope())
+    {
+        var services = scope.ServiceProvider;
+        var context = services.GetRequiredService<IdentityDbContext>();
+        var seeder = services.GetRequiredService<IDemoDataSeeder>();
 
-    try
-    {
-        await context.Database.MigrateAsync();
-        var seeder = scope.ServiceProvider.GetRequiredService<IDemoDataSeeder>();
-        await seeder.SeedPermissionsAsync();
+        try
+        {
+            Log.Information("Applying emergency migration health check...");
+            await context.Database.ExecuteSqlRawAsync(@"
+                DO $$ 
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'identity') THEN
+                        CREATE SCHEMA identity;
+                    END IF;
+
+                    IF NOT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'identity' AND tablename = 'AppModules') THEN
+                        CREATE TABLE identity.""AppModules"" (
+                            ""Id"" uuid NOT NULL PRIMARY KEY,
+                            ""Code"" varchar(50) NOT NULL UNIQUE,
+                            ""Name"" varchar(100) NOT NULL,
+                            ""Route"" varchar(200),
+                            ""Icon"" varchar(50),
+                            ""ParentId"" uuid REFERENCES identity.""AppModules""(""Id""),
+                            ""SortOrder"" int NOT NULL,
+                            ""IsVisibleInMenu"" boolean NOT NULL DEFAULT TRUE,
+                            ""IsActive"" boolean NOT NULL DEFAULT TRUE,
+                            ""GroupName"" varchar(50),
+                            ""CreatedAt"" timestamptz NOT NULL DEFAULT now()
+                        );
+                    END IF;
+
+                    IF EXISTS (SELECT FROM pg_tables WHERE tablename = '__EFMigrationsHistory') THEN
+                        INSERT INTO ""__EFMigrationsHistory"" (""MigrationId"", ""ProductVersion"")
+                        SELECT m, '8.0.8' FROM (VALUES 
+                            ('20251010043842_InitialCreate'),
+                            ('20260120170835_AddPasswordResetTokens'),
+                            ('20260121003836_AddMultiStoreAndRoles'),
+                            ('20260123042754_AddPermissionsTable'),
+                            ('20260202052652_CreateAppModulesTable')
+                        ) AS t(m)
+                        WHERE NOT EXISTS (SELECT 1 FROM ""__EFMigrationsHistory"" WHERE ""MigrationId"" = t.m);
+                    END IF;
+                END $$;");
+
+            Log.Information("Applying database migrations...");
+            await context.Database.MigrateAsync();
+            
+            Log.Information("Seeding demo data...");
+            await seeder.SeedAppModulesAsync();
+            await seeder.SeedPermissionsAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "An error occurred while migrating or seeding the database.");
+        }
     }
-    catch (Exception ex)
-    {
-        Log.Error(ex, "Error during database migration");
-    }
-}
 
 app.Run();
 }

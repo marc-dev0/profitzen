@@ -4,4 +4,5 @@ public interface IDemoDataSeeder
 {
     Task SeedDemoDataAsync(string tenantId, string storeId, Guid userId);
     Task SeedPermissionsAsync();
+    Task SeedAppModulesAsync();
 }

@@ -498,7 +498,13 @@ public class AnalyticsService : IAnalyticsService
 
     public async Task<InventoryInsightReportDto> GetInventoryInsightsAsync(string tenantId, Guid storeId, bool generateAi = false)
     {
-        await GenerateDailySummariesAsync(tenantId, storeId);
+        // Optimization: Only regenerate metrics if they are missing or if we are forcing an AI refresh
+        var hasRecentData = await _context.ProductPerformances.AnyAsync(p => p.TenantId == tenantId && p.UpdatedAt >= DateTime.UtcNow.AddHours(-1));
+        
+        if (!hasRecentData || generateAi)
+        {
+            await GenerateDailySummariesAsync(tenantId, storeId, skipAi: true);
+        }
 
         var connection = _context.Database.GetDbConnection();
         var wasOpen = connection.State == System.Data.ConnectionState.Open;
@@ -603,12 +609,33 @@ public class AnalyticsService : IAnalyticsService
 
             var deadStock = performance.Where(p => p.DaysSinceLastSale > 30 && p.TotalSold > 0).ToList();
 
-            string aiSummary;
-            if (generateAi)
+            string aiSummary = "";
+            bool shouldGenerate = generateAi;
+
+            // Try to fetch latest stored summary if we don't need to generate a new one
+            if (!shouldGenerate)
+            {
+                var latestStored = await _context.SmartSummaries
+                    .Where(s => s.TenantId == tenantId && s.StoreId == storeId && s.Type == "InventoryInsight")
+                    .OrderByDescending(s => s.CreatedAt)
+                    .FirstOrDefaultAsync();
+
+                if (latestStored != null)
+                {
+                    aiSummary = latestStored.Content;
+                }
+                else 
+                {
+                    // If none exists, we MUST generate it the first time even if generateAi is false
+                    shouldGenerate = true;
+                }
+            }
+
+            if (shouldGenerate)
             {
                 var prompt = $@"
-                    Eres un consultor experto en gestión de inventarios para MYPES en Perú. 
-                    Analiza los siguientes datos de inventario y proporciona un resumen estratégico en español (máximo 3 frases).
+                    ### [INST] Eres un consultor experto en gestión de inventarios para MYPES en Perú. 
+                    Analiza los siguientes datos de inventario y proporciona un resumen estratégico en español (máximo 3 párrafos).
                     Enfócate en el impacto financiero, la urgencia de reponer los productos críticos y qué hacer con el stock estancado.
 
                     DATOS DE RIESGO:
@@ -619,23 +646,39 @@ public class AnalyticsService : IAnalyticsService
 
                     PÉRDIDA POTENCIAL:
                     - Inversión sugerida para evitar quiebres: S/ {suggestedPurchases.Sum(s => s.EstimatedCost):N2}
+                    [/INST]
                 ";
 
                 try 
                 {
                     var result = await _kernel.InvokePromptAsync(prompt);
                     aiSummary = result.ToString();
+
+                    // Save the new summary for future use
+                    var newSummary = new Profitzen.Analytics.Domain.Entities.SmartSummary
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantId,
+                        StoreId = storeId,
+                        Date = DateTime.SpecifyKind(DateTime.Today, DateTimeKind.Utc),
+                        Section = "Analizador de Inventario",
+                        Content = aiSummary,
+                        Type = "InventoryInsight",
+                        CreatedAt = DateTime.UtcNow
+                    };
+
+                    _context.SmartSummaries.Add(newSummary);
+                    await _context.SaveChangesAsync();
                 }
                 catch (Exception ex)
                 {
-                    // Fallback to basic logic if AI is down
                     _logger.LogError(ex, "Error invoking AI prompt for inventory insights");
                     aiSummary = $"Análisis completado. Tienes {atRisk.Count(r => r.RiskLevel == "Critical")} productos en estado crítico. Se recomienda revisar las órdenes de compra urgentes.";
                 }
             }
-            else 
+            else if (string.IsNullOrEmpty(aiSummary))
             {
-                aiSummary = "Presiona 'Recalcular Inteligencia' para obtener un análisis estratégico detallado con IA sobre estos resultados.";
+                aiSummary = "Presiona 'Recalcular Inteligencia' para obtener un análisis estratégico detallado.";
             }
 
             return new InventoryInsightReportDto(
@@ -721,7 +764,7 @@ public class AnalyticsService : IAnalyticsService
 
         return alerts;
     }
-    public async Task GenerateDailySummariesAsync(string tenantId, Guid storeId)
+    public async Task GenerateDailySummariesAsync(string tenantId, Guid storeId, bool skipAi = false)
     {
         Console.WriteLine($"[Analytics] Starting generation for Tenant: {tenantId}, Store: {storeId}");
         
@@ -748,12 +791,6 @@ public class AnalyticsService : IAnalyticsService
                 var completedSales = await debugCmd.ExecuteScalarAsync();
                 Console.WriteLine($"[Analytics] Completed Sales (Status=2) before fix: {completedSales}");
             }
-
-            // 0. FIX DEMO DATA
-            var updatedCount = await _context.Database.ExecuteSqlRawAsync(
-                @"UPDATE sales.""Sales"" SET ""Status"" = 2 WHERE ""Status"" = 1 AND ""TenantId"" = {0}", 
-                tenantId);
-            Console.WriteLine($"[Analytics] Fixed {updatedCount} pending sales to completed.");
 
             // 1. Clear existing
             await _context.Database.ExecuteSqlRawAsync(
@@ -805,20 +842,6 @@ public class AnalyticsService : IAnalyticsService
             var insertedSummaries = await command.ExecuteNonQueryAsync();
             _logger.LogInformation("Generated {Count} daily summary rows for store {StoreId}", insertedSummaries, storeId);
 
-            // 2.5 Fix Schema Index (Migrate from old unique constraint to new one including ProductName)
-            try 
-            {
-                await _context.Database.ExecuteSqlRawAsync(@"
-                    DROP INDEX IF EXISTS analytics.""IX_ProductPerformances_TenantId_ProductId"";
-                    CREATE UNIQUE INDEX IF NOT EXISTS ""IX_ProductPerformances_TenantId_ProductId_ProductName"" 
-                    ON analytics.""ProductPerformances"" (""TenantId"", ""ProductId"", ""ProductName"");
-                ");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Could not update index schema automatically. Ignoring.");
-            }
-
             // 3. Generate Product Performance
             command.CommandText = @"
                 INSERT INTO analytics.""ProductPerformances""
@@ -848,10 +871,117 @@ public class AnalyticsService : IAnalyticsService
             
             var performanceRows = await command.ExecuteNonQueryAsync();
             _logger.LogInformation("Generated {Count} product performance rows for Tenant {TenantId}", performanceRows, tenantId);
+
+            // 4. Generate AI "Vigilante Nocturno" Insight - ONLY IF REQUESTED
+            if (!skipAi)
+            {
+                await GenerateVigilanteInsightAsync(tenantId, storeId);
+            }
         }
         finally
         {
             if (!wasOpen) await connection.CloseAsync();
+        }
+    }
+
+    public async Task<IEnumerable<SmartSummaryDto>> GetLatestSummariesAsync(string tenantId, Guid storeId, int count = 5, string? type = null)
+    {
+        try
+        {
+            var query = _context.SmartSummaries
+                .Where(s => s.TenantId == tenantId && s.StoreId == storeId);
+
+            if (!string.IsNullOrEmpty(type))
+            {
+                query = query.Where(s => s.Type == type);
+            }
+
+            var summaries = await query
+                .OrderByDescending(s => s.CreatedAt)
+                .Take(count)
+                .ToListAsync();
+
+            return summaries.Select(s => new SmartSummaryDto(
+                s.Id,
+                s.Section,
+                s.Content,
+                s.Type,
+                s.CreatedAt,
+                s.IsRead
+            ));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not fetch latest summaries. Might be due to missing table.");
+            return Enumerable.Empty<SmartSummaryDto>();
+        }
+    }
+
+    private async Task GenerateVigilanteInsightAsync(string tenantId, Guid storeId)
+    {
+        try
+        {
+            // Gather context data for the AI
+            var yesterday = DateTime.Today.AddDays(-1);
+            var summary = await _context.DailySalesSummaries
+                .OrderByDescending(s => s.Date)
+                .FirstOrDefaultAsync(s => s.TenantId == tenantId && s.StoreId == storeId);
+
+            var lowStock = await GetLowStockAlertsAsync(tenantId, storeId);
+            var topProducts = await GetTopProductsAsync(tenantId, 3);
+
+            var context = $@"
+                DATOS RECIENTES:
+                - Ventas Totales: {summary?.TotalRevenue ?? 0}
+                - Número de Ventas: {summary?.TotalSales ?? 0}
+                - Ganancia Neta: {summary?.TotalProfit ?? 0}
+                
+                TOP PRODUCTOS (Nombre exacto y Código): 
+                {string.Join("\n", topProducts.Select(p => $"- {p.ProductName} (Ref: {p.ProductCode})"))}
+                
+                ALERTAS DE STOCK BAJO: {lowStock.Count()} productos con poco inventario.
+            ";
+
+            var prompt = $@"
+                ### [INST] Eres el 'Vigilante Nocturno' de Profitzen, un experto en administración de negocios retail.
+                Tu tarea es resumir lo que pasó recientemente en la tienda y dar 1 consejo estratégico CLAVE en español.
+                
+                REGLAS CRÍTICAS DE FIDELIDAD:
+                1. Usa los NOMBRES EXACTOS Y LITERALES de los productos tal como aparecen en los DATOS. 
+                2. NO abrevies, NO limpies y NO cambies 'producto de pruebita' por 'producto de prueba'. Debe ser IDÉNTICO.
+                3. Menciona el código de referencia si ayuda a la claridad.
+                
+                OTRAS REGLAS:
+                1. Sé breve (máximo 3 párrafos cortos).
+                2. Usa un tono experto, directo pero amable.
+                3. Da UN consejo accionable para hoy basado en los datos.
+                
+                DATOS:
+                {context}
+                [/INST]
+            ";
+
+            var result = await _kernel.InvokePromptAsync(prompt);
+            var content = result.ToString();
+
+            var newSummary = new SmartSummary
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                StoreId = storeId,
+                Date = DateTime.SpecifyKind(DateTime.Today, DateTimeKind.Utc),
+                Section = "Vigilante Nocturno",
+                Content = content,
+                Type = "DailyInsight",
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.SmartSummaries.Add(newSummary);
+            await _context.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating Vigilante insight for tenant {TenantId}", tenantId);
         }
     }
 }

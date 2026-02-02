@@ -1,30 +1,18 @@
 import { UserRole } from '@/types/user';
 
-export type AppModule =
-    | 'dashboard'
-    | 'pos'
-    | 'sales'
-    | 'products'
-    | 'inventory'
-    | 'purchases'
-    | 'suppliers'
-    | 'customers'
-    | 'stores'
-    | 'users'
-    | 'settings'
-    | 'analytics';
+export type AppModule = string;
 
 export const MODULE_PERMISSIONS: Record<UserRole, AppModule[]> = {
     [UserRole.None]: [],
 
     [UserRole.Admin]: [
         'dashboard', 'pos', 'sales', 'products', 'inventory',
-        'purchases', 'suppliers', 'customers', 'stores', 'users', 'settings', 'analytics'
+        'purchases', 'suppliers', 'customers', 'stores', 'users', 'settings', 'analytics', 'analytics_ia'
     ],
 
     [UserRole.Manager]: [
         'dashboard', 'pos', 'sales', 'products', 'inventory',
-        'purchases', 'suppliers', 'customers', 'stores', 'analytics'
+        'purchases', 'suppliers', 'customers', 'stores', 'analytics', 'analytics_ia'
     ],
 
     [UserRole.Cashier]: [
