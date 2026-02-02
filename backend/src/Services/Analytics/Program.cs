@@ -57,21 +57,8 @@ builder.Services.AddHttpClient();
 // AI - Semantic Kernel with local Ollama
 var ollamaUrl = builder.Configuration["AI:OllamaUrl"] ?? "http://localhost:11434";
 var ollamaModel = builder.Configuration["AI:Model"] ?? "llama3.2";
-
-// Manually create OllamaApiClient with custom HttpClient (5-minute timeout for slow VPS)
-builder.Services.AddSingleton<Microsoft.SemanticKernel.ChatCompletion.IChatCompletionService>(sp =>
-{
-    var httpClient = new HttpClient
-    {
-        BaseAddress = new Uri(ollamaUrl),
-        Timeout = TimeSpan.FromMinutes(5) // Extended timeout for slow AI on VPS
-    };
-    
-    var ollamaClient = new OllamaSharp.OllamaApiClient(httpClient);
-    return ollamaClient.AsChatCompletionService(ollamaModel);
-});
-
-builder.Services.AddKernel();
+builder.Services.AddKernel()
+                .AddOllamaChatCompletion(ollamaModel, new Uri(ollamaUrl));
 
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 builder.Services.AddAuthorization();

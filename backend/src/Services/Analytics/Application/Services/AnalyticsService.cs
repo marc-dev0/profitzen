@@ -651,7 +651,9 @@ public class AnalyticsService : IAnalyticsService
 
                 try 
                 {
-                    var result = await _kernel.InvokePromptAsync(prompt);
+                    // Use extended timeout for slow AI on VPS
+                    using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+                    var result = await _kernel.InvokePromptAsync(prompt, cancellationToken: cts.Token);
                     aiSummary = result.ToString();
 
                     // Save the new summary for future use
@@ -961,7 +963,9 @@ public class AnalyticsService : IAnalyticsService
                 [/INST]
             ";
 
-            var result = await _kernel.InvokePromptAsync(prompt);
+            // Use extended timeout for slow AI on VPS
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+            var result = await _kernel.InvokePromptAsync(prompt, cancellationToken: cts.Token);
             var content = result.ToString();
 
             var newSummary = new SmartSummary
