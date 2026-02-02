@@ -52,6 +52,12 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
+// Configure HttpClient with extended timeout for Ollama (AI model can be slow on VPS)
+builder.Services.AddHttpClient("Ollama", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(300); // 5 minutes for slow AI responses
+});
+
 builder.Services.AddHttpClient();
 
 // AI - Semantic Kernel with local Ollama
