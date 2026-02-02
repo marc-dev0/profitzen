@@ -11,7 +11,6 @@ namespace Profitzen.Identity.Controllers;
 [ApiController]
 [Route("api/stores")]
 [Authorize]
-[RequireRole(UserRole.Admin)]
 public class StoresController : ControllerBase
 {
     private readonly IStoreService _storeService;
@@ -33,6 +32,7 @@ public class StoresController : ControllerBase
     }
 
     [HttpGet]
+    [RequireRole(UserRole.Admin, UserRole.Manager, UserRole.Cashier, UserRole.Logistics)]
     public async Task<IActionResult> GetStores()
     {
         var tenantId = GetCurrentTenantId();
@@ -41,6 +41,7 @@ public class StoresController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [RequireRole(UserRole.Admin, UserRole.Manager, UserRole.Cashier, UserRole.Logistics)]
     public async Task<IActionResult> GetStore(Guid id)
     {
         var store = await _storeService.GetStoreByIdAsync(id);
@@ -51,6 +52,7 @@ public class StoresController : ControllerBase
     }
 
     [HttpPost]
+    [RequireRole(UserRole.Admin)]
     public async Task<IActionResult> CreateStore([FromBody] CreateStoreRequest request)
     {
         try
@@ -67,6 +69,7 @@ public class StoresController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [RequireRole(UserRole.Admin)]
     public async Task<IActionResult> UpdateStore(Guid id, [FromBody] UpdateStoreRequest request)
     {
         try
@@ -82,6 +85,7 @@ public class StoresController : ControllerBase
     }
 
     [HttpPatch("{id:guid}/activate")]
+    [RequireRole(UserRole.Admin)]
     public async Task<IActionResult> ActivateStore(Guid id)
     {
         var userId = GetCurrentUserId();
@@ -93,6 +97,7 @@ public class StoresController : ControllerBase
     }
 
     [HttpPatch("{id:guid}/deactivate")]
+    [RequireRole(UserRole.Admin)]
     public async Task<IActionResult> DeactivateStore(Guid id)
     {
         var userId = GetCurrentUserId();

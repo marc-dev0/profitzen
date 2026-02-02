@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
-import { getRoleLabel } from '@/types/user';
+import { getRoleLabel, UserRole } from '@/types/user';
 import {
     Menu,
     LogOut,
@@ -139,16 +139,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                             <p className="text-xs text-muted-foreground">{user?.role ? getRoleLabel(user.role) : 'Sin Rol'}</p>
                                         </div>
 
-                                        <button
-                                            onClick={() => {
-                                                setIsProfileMenuOpen(false);
-                                                setIsPermissionsOpen(true);
-                                            }}
-                                            className="w-full flex items-center px-4 py-2.5 text-sm text-foreground hover:bg-accent transition-colors"
-                                        >
-                                            <Shield className="w-4 h-4 mr-3 text-muted-foreground" />
-                                            Configurar Permisos
-                                        </button>
+                                        {(user?.role !== undefined && (user.role & UserRole.Admin) === UserRole.Admin) && (
+                                            <button
+                                                onClick={() => {
+                                                    setIsProfileMenuOpen(false);
+                                                    setIsPermissionsOpen(true);
+                                                }}
+                                                className="w-full flex items-center px-4 py-2.5 text-sm text-foreground hover:bg-accent transition-colors"
+                                            >
+                                                <Shield className="w-4 h-4 mr-3 text-muted-foreground" />
+                                                Configurar Permisos
+                                            </button>
+                                        )}
 
                                         <div className="my-1 border-t border-border"></div>
 

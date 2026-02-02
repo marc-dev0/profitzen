@@ -18,10 +18,18 @@ public class DemoDataSeeder : IDemoDataSeeder
 
     public async Task SeedDemoDataAsync(string tenantId, string storeId, Guid userId)
     {
-        _logger.LogInformation("Starting demo data seeding for Tenant: {TenantId}, Store: {StoreId}, User: {UserId}", tenantId, storeId, userId);
+        var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
+        if (environment != "Development" && environment != "Demo")
+        {
+            _logger.LogWarning("SeedDemoDataAsync called in {Env} environment. Skipping for safety.", environment);
+            return;
+        }
+
+        _logger.LogInformation("Starting demo data seeding...");
 
         try
         {
+            await SeedAppModulesAsync();
             await SeedPermissionsAsync();
             await SeedPriceListsAsync(tenantId);
             await SeedCategoriesAsync(tenantId, storeId);
@@ -270,45 +278,109 @@ public class DemoDataSeeder : IDemoDataSeeder
 
     public async Task SeedPermissionsAsync()
     {
+        // Only seed if empty to allow UI changes to persist across restarts
+        var existingCount = await _context.RoleModulePermissions.CountAsync();
+        if (existingCount > 0)
+        {
+            _logger.LogInformation("Permissions matrix already exists, skipping initial seed.");
+            return;
+        }
+
+        _logger.LogInformation("Refreshing role permissions matrix (Initial Seed)...");
+
+        // Clear all existing permissions to apply the new consolidated matrix
+        await _context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE identity.\"RoleModulePermissions\" RESTART IDENTITY CASCADE;");
+
         var permissions = new List<(UserRole Role, string Module)>
         {
-            // Admin
-            (UserRole.Admin, "dashboard"), (UserRole.Admin, "pos"), (UserRole.Admin, "sales"), 
-            (UserRole.Admin, "products"), (UserRole.Admin, "inventory"), (UserRole.Admin, "purchases"), 
-            (UserRole.Admin, "suppliers"), (UserRole.Admin, "customers"), (UserRole.Admin, "stores"), 
-            (UserRole.Admin, "users"), (UserRole.Admin, "settings"), (UserRole.Admin, "analytics"),
+            // Admin (1) - Everything
+            (UserRole.Admin, "dashboard"), (UserRole.Admin, "pos"), (UserRole.Admin, "stores"),
+            (UserRole.Admin, "sales"), (UserRole.Admin, "customers"),
+            (UserRole.Admin, "analytics"), (UserRole.Admin, "analytics_ia"), (UserRole.Admin, "analytics_ia_history"),
+            (UserRole.Admin, "products"), (UserRole.Admin, "inventory"), (UserRole.Admin, "purchases"), (UserRole.Admin, "suppliers"),
+            (UserRole.Admin, "settings"), (UserRole.Admin, "users"),
 
-            // Manager
-            (UserRole.Manager, "dashboard"), (UserRole.Manager, "pos"), (UserRole.Manager, "sales"), 
-            (UserRole.Manager, "products"), (UserRole.Manager, "inventory"), (UserRole.Manager, "purchases"), 
-            (UserRole.Manager, "suppliers"), (UserRole.Manager, "customers"), (UserRole.Manager, "stores"), 
-            (UserRole.Manager, "analytics"),
+            // Manager (2)
+            (UserRole.Manager, "dashboard"), (UserRole.Manager, "pos"), (UserRole.Manager, "stores"),
+            (UserRole.Manager, "sales"), (UserRole.Manager, "customers"),
+            (UserRole.Manager, "analytics"), (UserRole.Manager, "analytics_ia"), (UserRole.Manager, "analytics_ia_history"),
+            (UserRole.Manager, "products"), (UserRole.Manager, "inventory"), (UserRole.Manager, "purchases"), (UserRole.Manager, "suppliers"),
+            (UserRole.Manager, "settings"),
 
-            // Cashier
-            (UserRole.Cashier, "pos"), (UserRole.Cashier, "customers"),
+            // Cashier (4)
+            (UserRole.Cashier, "pos"), (UserRole.Cashier, "sales"), (UserRole.Cashier, "customers"), (UserRole.Cashier, "stores"),
 
-            // Logistics
-            (UserRole.Logistics, "products"), (UserRole.Logistics, "inventory"), (UserRole.Logistics, "purchases"), 
-            (UserRole.Logistics, "suppliers")
+            // Logistics (8)
+            (UserRole.Logistics, "products"), (UserRole.Logistics, "inventory"), (UserRole.Logistics, "purchases"), (UserRole.Logistics, "suppliers"), (UserRole.Logistics, "stores")
         };
 
         foreach (var p in permissions)
         {
-            var exists = await _context.RoleModulePermissions
-                .AnyAsync(x => x.Role == p.Role && x.Module == p.Module);
-
-            if (!exists)
+            _context.RoleModulePermissions.Add(new RoleModulePermission
             {
-                _context.RoleModulePermissions.Add(new RoleModulePermission
-                {
-                    Role = p.Role,
-                    Module = p.Module
-                });
-            }
+                Role = p.Role,
+                Module = p.Module
+            });
         }
 
         await _context.SaveChangesAsync();
-        _logger.LogInformation("Seeded role permissions");
+        _logger.LogInformation("Role permissions matrix seeded successfully");
+    }
+
+    public async Task SeedAppModulesAsync()
+    {
+        // For modules, we check if they exist. If they do, we might want to update them, 
+        // but for now, we only seed if empty to avoid breaking foreign keys or losing visibility settings.
+        var existingCount = await _context.AppModules.CountAsync();
+        if (existingCount > 0)
+        {
+            _logger.LogInformation("System modules already exist, skipping initial seed.");
+            return;
+        }
+
+        _logger.LogInformation("Refreshing system modules via Initial Seed...");
+        
+        // Deep clean using raw SQL to clear hierarchical residues
+        await _context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE identity.\"AppModules\" RESTART IDENTITY CASCADE;");
+
+        var modules = new List<AppModule>
+        {
+            // PRINCIPAL
+            new AppModule { Code = "dashboard", Name = "Dashboard", Route = "/dashboard", Icon = "LayoutDashboard", GroupName = "PRINCIPAL", SortOrder = 1 },
+            new AppModule { Code = "pos", Name = "Punto de Venta", Route = "/pos", Icon = "ShoppingCart", GroupName = "PRINCIPAL", SortOrder = 2 },
+            new AppModule { Code = "stores", Name = "Sucursales", Route = "/stores", Icon = "Store", GroupName = "PRINCIPAL", SortOrder = 3 },
+            
+            // VENTAS
+            new AppModule { Code = "sales", Name = "Historial de Ventas", Route = "/sales", Icon = "FileText", GroupName = "VENTAS", SortOrder = 1 },
+            new AppModule { Code = "customers", Name = "Clientes", Route = "/customers", Icon = "Users", GroupName = "VENTAS", SortOrder = 2 },
+            
+            // INTELIGENCIA
+            new AppModule { Code = "analytics", Name = "Centro Analítico", Route = "/analytics", Icon = "BarChart3", GroupName = "INTELIGENCIA", SortOrder = 1 },
+            new AppModule { Code = "analytics_ia", Name = "Analizador IA", Route = "/analytics/ia", Icon = "BrainCircuit", GroupName = "INTELIGENCIA", SortOrder = 2 },
+            new AppModule { Code = "analytics_ia_history", Name = "Bitácora de IA", Route = "/analytics/ia/vigilante/history", Icon = "Clock", GroupName = "INTELIGENCIA", SortOrder = 3 },
+            
+            // OPERACIONES
+            new AppModule { Code = "products", Name = "Catálogo de Productos", Route = "/products", Icon = "Tags", GroupName = "OPERACIONES", SortOrder = 1 },
+            new AppModule { Code = "inventory", Name = "Control de Stock", Route = "/inventory", Icon = "Package", GroupName = "OPERACIONES", SortOrder = 2 },
+            new AppModule { Code = "purchases", Name = "Gestión de Compras", Route = "/purchases", Icon = "CreditCard", GroupName = "OPERACIONES", SortOrder = 3 },
+            new AppModule { Code = "suppliers", Name = "Proveedores", Route = "/suppliers", Icon = "Truck", GroupName = "OPERACIONES", SortOrder = 4 },
+            
+            // CONFIGURACION
+            new AppModule { Code = "settings", Name = "Mi Empresa", Route = "/settings", Icon = "Store", GroupName = "CONFIGURACION", SortOrder = 1 },
+            new AppModule { Code = "users", Name = "Usuarios y Roles", Route = "/users", Icon = "UserCog", GroupName = "CONFIGURACION", SortOrder = 2 }
+        };
+
+        foreach (var m in modules)
+        {
+            m.Id = Guid.NewGuid();
+            m.CreatedAt = DateTime.UtcNow;
+            m.IsActive = true;
+            m.IsVisibleInMenu = true;
+            _context.AppModules.Add(m);
+        }
+
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("System modules flattened and seeded successfully.");
     }
 
     // DTOs para queries

@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getPermissions, updatePermissions, UpdatePermissionRequest, PermissionDto } from '@/services/permissionsService';
+import { getPermissions, updatePermissions, UpdatePermissionRequest, PermissionDto, getSystemModules } from '@/services/permissionsService';
 import { UserRole, getRoleLabel } from '@/types/user';
 import { AppModule } from '@/config/permissions';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -10,20 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Shield, Save, Check } from 'lucide-react';
 import { toast } from 'sonner';
 
-// Define available modules for display
-const MODULES: { code: AppModule; name: string }[] = [
-    { code: 'dashboard', name: 'Dashboard' },
-    { code: 'pos', name: 'Punto de Venta' },
-    { code: 'sales', name: 'Historial de Ventas' },
-    { code: 'products', name: 'Gestión de Productos' },
-    { code: 'inventory', name: 'Inventario' },
-    { code: 'purchases', name: 'Compras' },
-    { code: 'customers', name: 'Clientes' },
-    { code: 'stores', name: 'Sucursales' },
-    { code: 'users', name: 'Usuarios y Roles' },
-    { code: 'settings', name: 'Configuración Empresa' },
-    { code: 'analytics', name: 'Reportes y Analytics' },
-];
+// Hardcoded modules list removed in favor of dynamic DB fetching
 
 export function PermissionsDialog({ open, onOpenChange }: { open?: boolean; onOpenChange?: (open: boolean) => void }) {
     const [internalOpen, setInternalOpen] = useState(false);
@@ -36,11 +23,19 @@ export function PermissionsDialog({ open, onOpenChange }: { open?: boolean; onOp
     const queryClient = useQueryClient();
     const [localPermissions, setLocalPermissions] = useState<PermissionDto[]>([]);
 
-    const { data: serverPermissions, isLoading } = useQuery({
+    const { data: serverPermissions, isLoading: loadingPerms } = useQuery({
         queryKey: ['permissions'],
         queryFn: getPermissions,
         enabled: isOpen,
     });
+
+    const { data: systemModules, isLoading: loadingModules } = useQuery({
+        queryKey: ['system-modules'],
+        queryFn: getSystemModules,
+        enabled: isOpen,
+    });
+
+    const isLoading = loadingPerms || loadingModules;
 
     useEffect(() => {
         if (serverPermissions) {
@@ -52,10 +47,9 @@ export function PermissionsDialog({ open, onOpenChange }: { open?: boolean; onOp
         mutationFn: updatePermissions,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['permissions'] });
-            toast.success('Permisos actualizados correctamente');
-            // Force reload to apply changes if current user affected? 
-            // Better to let them know
-            toast.info('Los cambios se aplicarán en el próximo inicio de sesión de los usuarios afectados.');
+            queryClient.invalidateQueries({ queryKey: ['user-menu'] });
+            toast.success('Permisos actualizados correctamente', { duration: 2000 });
+            toast.info('Los cambios se aplicarán en el próximo inicio de sesión', { duration: 3000 });
             setIsOpen(false);
         },
         onError: () => {
@@ -132,10 +126,17 @@ export function PermissionsDialog({ open, onOpenChange }: { open?: boolean; onOp
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border">
-                                    {MODULES.map(module => (
+                                    {systemModules?.map(module => (
                                         <tr key={module.code} className="hover:bg-muted/50 transition-colors">
                                             <td className="px-4 py-3 font-medium text-foreground">
-                                                {module.name}
+                                                <div className="flex flex-col">
+                                                    <span>{module.name}</span>
+                                                    {module.groupName && (
+                                                        <span className="text-[10px] text-blue-500 font-bold uppercase tracking-tight">
+                                                            {module.groupName}
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <div className="text-xs text-muted-foreground font-normal">{module.code}</div>
                                             </td>
                                             {roles.map(role => (
@@ -143,8 +144,8 @@ export function PermissionsDialog({ open, onOpenChange }: { open?: boolean; onOp
                                                     <div className="flex justify-center">
                                                         <input
                                                             type="checkbox"
-                                                            checked={isChecked(role, module.code)}
-                                                            onChange={() => handleToggle(role, module.code)}
+                                                            checked={isChecked(role, module.code as any)}
+                                                            onChange={() => handleToggle(role, module.code as any)}
                                                             className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600"
                                                         />
                                                     </div>
