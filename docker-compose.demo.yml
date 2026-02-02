@@ -180,22 +180,22 @@ services:
     networks:
       - profitzen-demo-network
 
-  ollama-demo:
-    image: ollama/ollama:latest
-    restart: always
-    volumes:
-      - ollama_demo_data:/root/.ollama
-    networks:
-      - profitzen-demo-network
-
-  ollama-pull-model-demo:
-    image: curlimages/curl
-    depends_on:
-      - ollama-demo
-    networks:
-      - profitzen-demo-network
-    command: >
-      sh -c "sleep 10 && curl -X POST http://ollama-demo:11434/api/pull -d '{\"name\": \"llama3.2\"}'"
+  #   ollama-demo:
+  #     image: ollama/ollama:latest
+  #     restart: always
+  #     volumes:
+  #       - ollama_demo_data:/root/.ollama
+  #     networks:
+  #       - profitzen-demo-network
+  #
+  #   ollama-pull-model-demo:
+  #     image: curlimages/curl
+  #     depends_on:
+  #       - ollama-demo
+  #     networks:
+  #       - profitzen-demo-network
+  #     command: >
+  #       sh -c "sleep 10 && curl -X POST http://ollama-demo:11434/api/pull -d '{\"name\": \"llama3.2\"}'"
 
   seq-demo:
     image: datalust/seq:latest
