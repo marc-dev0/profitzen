@@ -68,7 +68,7 @@ builder.Services.AddSingleton<Microsoft.SemanticKernel.ChatCompletion.IChatCompl
     };
     
     var ollamaClient = new OllamaSharp.OllamaApiClient(httpClient);
-    return new Microsoft.SemanticKernel.Connectors.Ollama.OllamaChatCompletionService(ollamaModel, ollamaClient);
+    return ollamaClient.AsChatCompletionService(ollamaModel);
 });
 
 builder.Services.AddKernel();
