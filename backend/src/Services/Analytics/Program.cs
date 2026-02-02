@@ -52,23 +52,26 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-// Configure global HttpClient timeout (affects all HTTP clients including Ollama)
-builder.Services.ConfigureHttpClientDefaults(http =>
-{
-    http.ConfigureHttpClient(client =>
-    {
-        client.Timeout = TimeSpan.FromMinutes(5); // 5 minutes for slow AI responses on VPS
-    });
-});
-
 builder.Services.AddHttpClient();
 
 // AI - Semantic Kernel with local Ollama
 var ollamaUrl = builder.Configuration["AI:OllamaUrl"] ?? "http://localhost:11434";
 var ollamaModel = builder.Configuration["AI:Model"] ?? "llama3.2";
 
-builder.Services.AddKernel()
-                .AddOllamaChatCompletion(ollamaModel, new Uri(ollamaUrl));
+// Manually create OllamaApiClient with custom HttpClient (5-minute timeout for slow VPS)
+builder.Services.AddSingleton<Microsoft.SemanticKernel.ChatCompletion.IChatCompletionService>(sp =>
+{
+    var httpClient = new HttpClient
+    {
+        BaseAddress = new Uri(ollamaUrl),
+        Timeout = TimeSpan.FromMinutes(5) // Extended timeout for slow AI on VPS
+    };
+    
+    var ollamaClient = new OllamaSharp.OllamaApiClient(httpClient);
+    return new Microsoft.SemanticKernel.Connectors.Ollama.OllamaChatCompletionService(ollamaModel, ollamaClient);
+});
+
+builder.Services.AddKernel();
 
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 builder.Services.AddAuthorization();
