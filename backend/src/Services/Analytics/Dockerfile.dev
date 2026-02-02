@@ -1,0 +1,22 @@
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS development
+
+WORKDIR /app
+
+COPY src/Shared/Profitzen.Common/*.csproj ./src/Shared/Profitzen.Common/
+COPY src/Services/Analytics/*.csproj ./src/Services/Analytics/
+
+RUN dotnet restore src/Services/Analytics/Profitzen.Analytics.csproj
+
+COPY src/Shared/Profitzen.Common/ ./src/Shared/Profitzen.Common/
+COPY src/Services/Analytics/ ./src/Services/Analytics/
+
+WORKDIR /app/src/Services/Analytics
+
+ENV ASPNETCORE_ENVIRONMENT=Development
+ENV ASPNETCORE_URLS=http://+:80
+
+RUN dotnet build
+
+EXPOSE 80
+
+CMD ["dotnet", "run", "--urls", "http://0.0.0.0:80"]

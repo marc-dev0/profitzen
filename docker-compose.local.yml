@@ -25,41 +25,41 @@ services:
     networks:
       - profitzen-network
 
-  identity-service:
-    build:
-      context: ./backend
-      dockerfile: src/Services/Identity/Dockerfile.dev
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ASPNETCORE_URLS=http://+:80
-      - ConnectionStrings__DefaultConnection=Host=postgres;Database=profitzen;Username=identity_user;Password=dev_password_123;Schema=identity
-    volumes:
-      - ./backend/src/Services/Identity:/app/src/Services/Identity
-      - ./backend/src/Shared:/app/src/Shared
-    depends_on:
-      - postgres
-    networks:
-      - profitzen-network
+  # identity-service:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: src/Services/Identity/Dockerfile.dev
+  #   environment:
+  #     - ASPNETCORE_ENVIRONMENT=Development
+  #     - ASPNETCORE_URLS=http://+:80
+  #     - ConnectionStrings__DefaultConnection=Host=postgres;Database=profitzen;Username=identity_user;Password=dev_password_123;Schema=identity
+  #   volumes:
+  #     - ./backend/src/Services/Identity:/app/src/Services/Identity
+  #     - ./backend/src/Shared:/app/src/Shared
+  #   depends_on:
+  #     - postgres
+  #   networks:
+  #     - profitzen-network
 
-  ollama:
-    image: ollama/ollama:latest
-    restart: always
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_local_data:/root/.ollama
-    networks:
-      - profitzen-network
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   restart: always
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_local_data:/root/.ollama
+  #   networks:
+  #     - profitzen-network
 
-  ollama-pull-model:
-    image: curlimages/curl
-    container_name: profitzen-ollama-puller
-    depends_on:
-      - ollama
-    networks:
-      - profitzen-network
-    command: >
-      sh -c "sleep 10 && curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"llama3\"}'"
+  # ollama-pull-model:
+  #   image: curlimages/curl
+  #   container_name: profitzen-ollama-puller
+  #   depends_on:
+  #     - ollama
+  #   networks:
+  #     - profitzen-network
+  #   command: >
+  #     sh -c "sleep 10 && curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"llama3\"}'"
 
   seq:
     image: datalust/seq:latest

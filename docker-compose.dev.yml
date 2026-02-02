@@ -118,6 +118,24 @@ services:
     networks:
       - profitzen-network
 
+  analytics-service:
+    build:
+      context: ./backend
+      dockerfile: src/Services/Analytics/Dockerfile.dev
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=profitzen;Username=analytics_user;Password=dev_password_123;Schema=analytics
+      - AI__OllamaUrl=http://host.docker.internal:11434
+      - AI__Model=llama3.2
+    volumes:
+      - ./backend/src/Services/Analytics:/app/src/Services/Analytics
+      - ./backend/src/Shared:/app/src/Shared
+    depends_on:
+      - postgres
+    networks:
+      - profitzen-network
+
   frontend:
     build:
       context: ./frontend
@@ -136,6 +154,7 @@ services:
 
 volumes:
   postgres_dev_data:
+
 
 networks:
   profitzen-network:
