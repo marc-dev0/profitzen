@@ -201,9 +201,6 @@ services:
     environment:
       - ACCEPT_EULA=Y
       - SEQ_FIRSTRUN_ADMINPASSWORD=${SEQ_ADMIN_PASSWORD}
-    ports:
-      - "5340:80"
-      - "5344:5341"
     volumes:
       - seq_prod_data:/data
     networks:
