@@ -126,6 +126,7 @@ public record SuggestedPurchaseDto(
     string ProductCode,
     string ProductName,
     int QuantityToOrder,
+    decimal UnitPrice,
     decimal EstimatedCost,
     string Reason
 );
@@ -143,5 +144,6 @@ public record InventoryInsightReportDto(
     List<RiskAssessmentDto> AtRiskProducts,
     List<ProductPerformanceDto> DeadStock,
     List<SuggestedPurchaseDto> PurchaseRecommendations,
-    string AiSummary
+    string AiSummary,
+    bool IsAiProcessing = false
 );

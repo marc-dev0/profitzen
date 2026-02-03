@@ -185,19 +185,29 @@ export default function DashboardPage() {
             </div>
             <button
               onClick={async () => {
-                const t = toast.loading('Consultando al Vigilante...');
+                const t = toast.loading('El Vigilante está analizando tus datos en segundo plano...');
                 try {
                   await recalculate.mutateAsync(user?.currentStoreId);
-                  await refetchSummaries();
-                  toast.success('¡Vigilante ha analizado tus datos!', { id: t });
+                  toast.success('¡Proceso iniciado! El consejo aparecerá en unos momentos.', { id: t });
+
+                  // Poll for updates every 5 seconds for the next 2 minutes (24 attempts)
+                  let attempts = 0;
+                  const interval = setInterval(async () => {
+                    attempts++;
+                    await refetchSummaries();
+                    if (attempts >= 24) {
+                      clearInterval(interval);
+                    }
+                  }, 5000);
+
                 } catch (e) {
-                  toast.error('Vigilante está ocupado, intenta luego.', { id: t });
+                  toast.error('El Vigilante está ocupado, intenta luego.', { id: t });
                 }
               }}
               disabled={recalculate.isPending}
               className="px-8 py-4 bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-2xl font-black uppercase tracking-widest text-xs text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all shadow-sm hover:shadow-indigo-500/20 active:scale-95 disabled:opacity-50"
             >
-              {recalculate.isPending ? 'Analizando...' : 'Activar Vigilante'}
+              {recalculate.isPending ? 'Iniciando...' : 'Activar Vigilante'}
             </button>
           </div>
         ) : summaries && summaries.length > 0 ? (
@@ -219,7 +229,10 @@ export default function DashboardPage() {
                 <div className="flex items-center gap-3">
                   <span className="text-xs font-black text-indigo-400 uppercase tracking-[0.2em]">IA Insight • {summaries[0].section}</span>
                   <span className="w-1 h-1 rounded-full bg-slate-700" />
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">{new Date(summaries[0].createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">
+                    {new Date(summaries[0].createdAt).toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })} •
+                    {new Date(summaries[0].createdAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
                 </div>
 
                 <div className="space-y-6">
@@ -236,17 +249,25 @@ export default function DashboardPage() {
                       const t = toast.loading('Sincronizando y pidiendo consejo...');
                       try {
                         await recalculate.mutateAsync(user?.currentStoreId);
-                        await refetchSummaries();
-                        toast.success('¡Análisis actualizado!', { id: t });
+                        toast.success('¡Proceso iniciado! Se actualizará en breve.', { id: t });
+
+                        // Poll for updates every 5 seconds for 2 minutes
+                        let attempts = 0;
+                        const interval = setInterval(async () => {
+                          attempts++;
+                          await refetchSummaries();
+                          if (attempts >= 24) clearInterval(interval);
+                        }, 5000);
+
                       } catch (e) {
-                        toast.error('Error al actualizar.', { id: t });
+                        toast.error('Error al iniciar actualización.', { id: t });
                       }
                     }}
                     disabled={recalculate.isPending}
                     className="px-5 py-2.5 bg-indigo-500/20 hover:bg-indigo-500/40 text-indigo-300 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all border border-indigo-500/30"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${recalculate.isPending ? 'animate-spin' : ''}`} />
-                    {recalculate.isPending ? 'Analizando...' : 'Pedir nuevo consejo'}
+                    {recalculate.isPending ? 'Iniciando...' : 'Pedir nuevo consejo'}
                   </button>
 
                   <button

@@ -17,9 +17,11 @@ import {
     DollarSign,
     MinusCircle
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { InventoryInsightReport, RiskAssessment, SuggestedPurchase, ProductPerformance } from '@/types/analytics';
 
 export default function IntelligentAnalyzerPage() {
+    const router = useRouter();
     const [insights, setInsights] = useState<InventoryInsightReport | null>(null);
     const [loading, setLoading] = useState(true);
     const [analyzing, setAnalyzing] = useState(false);
@@ -30,12 +32,22 @@ export default function IntelligentAnalyzerPage() {
 
     const fetchInsights = async (refreshAi: boolean = false) => {
         try {
-            if (!refreshAi) setLoading(true);
+            if (!refreshAi && !analyzing) setLoading(true);
             const token = localStorage.getItem('token');
             const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/analytics/inventory/insights?refreshAi=${refreshAi}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
+
             setInsights(response.data);
+
+            // If processing in background, poll again in 5 seconds
+            if (response.data.isAiProcessing) {
+                setAnalyzing(true);
+                setTimeout(() => fetchInsights(false), 5000);
+            } else if (analyzing) {
+                setAnalyzing(false);
+                toast.success('Análisis estratégico de IA completado');
+            }
         } catch (error) {
             console.error('Error fetching insights:', error);
             toast.error('Error al cargar el análisis de inventario');
@@ -45,22 +57,26 @@ export default function IntelligentAnalyzerPage() {
     };
 
     const runFullAnalysis = async () => {
+        if (analyzing) return;
+
         setAnalyzing(true);
         // Set a "thinking" message so the user knows the IA is working
-        setInsights(prev => prev ? { ...prev, aiSummary: "La inteligencia artificial está analizando tus datos en tiempo real... Por favor, espera un momento." } : null);
+        setInsights(prev => prev ? { ...prev, aiSummary: "La inteligencia artificial está analizando tus datos en segundo plano... Puedes seguir navegando, los resultados se actualizarán automáticamente." } : null);
 
         try {
-            // Fetch with AI refresh
             const token = localStorage.getItem('token');
-            const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/analytics/inventory/insights?refreshAi=true`, {
+            // Trigger background analysis
+            await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/analytics/inventory/insights/trigger`, {}, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setInsights(response.data);
-            toast.success('Análisis estratégico de IA completado');
+
+            toast.info('Proceso de IA iniciado. Los resultados aparecerán en unos momentos.');
+
+            // Start polling
+            setTimeout(() => fetchInsights(false), 3000);
         } catch (error) {
             console.error('Error in full analysis:', error);
-            toast.error('Error al procesar el análisis de IA');
-        } finally {
+            toast.error('Error al iniciar el análisis de IA');
             setAnalyzing(false);
         }
     };
@@ -96,6 +112,19 @@ export default function IntelligentAnalyzerPage() {
             </AppLayout>
         );
     }
+
+    const handleGoToPurchase = (s: SuggestedPurchase) => {
+        const riskItem = insights?.atRiskProducts.find(r => r.productId === s.productId);
+        const params = new URLSearchParams({
+            productId: s.productId,
+            productName: s.productName,
+            quantity: s.quantityToOrder.toString(),
+            price: s.unitPrice.toString(),
+            uomId: "" // We lead with basic info, PurchasesPage will fetch full product details
+        });
+
+        router.push(`/purchases?${params.toString()}`);
+    };
 
     return (
         <AppLayout>
@@ -139,7 +168,7 @@ export default function IntelligentAnalyzerPage() {
                                 Resumen del Analizador
                             </h3>
                             <p className="text-blue-100 text-lg leading-relaxed max-w-4xl">
-                                {insights?.aiSummary || "Analizando comportamiento de ventas para generar recomendaciones..."}
+                                {insights?.aiSummary || (analyzing ? "El cerebro artificial de Profitzen está procesando miles de datos para darte la mejor estrategia..." : "Analizando comportamiento de ventas para generar recomendaciones...")}
                             </p>
                         </div>
                     </div>
@@ -238,7 +267,10 @@ export default function IntelligentAnalyzerPage() {
                                                         {formatCurrency(s.estimatedCost)}
                                                     </td>
                                                     <td className="px-6 py-4 text-right">
-                                                        <button className="p-2 rounded-lg bg-blue-50 text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <button
+                                                            onClick={() => handleGoToPurchase(s)}
+                                                            className="p-2 rounded-lg bg-blue-50 text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                        >
                                                             <ArrowRight className="w-4 h-4" />
                                                         </button>
                                                     </td>

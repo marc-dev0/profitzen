@@ -7,6 +7,7 @@ public record SaleDto(
     string SaleNumber,
     Guid StoreId,
     Guid CashierId,
+    string? CashierName,
     Guid? CustomerId,
     string? CustomerName,
     DateTime SaleDate,
@@ -48,6 +49,7 @@ public record PaymentDto(
 public record CreateSaleRequest(
     Guid? CustomerId,
     string? Notes,
+    string? CashierName = null,
     string? DocumentType = null,
     List<AddSaleItemRequest>? Items = null,
     List<AddPaymentRequest>? Payments = null

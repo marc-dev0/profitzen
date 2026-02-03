@@ -54,25 +54,37 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddHttpClient();
 
-// AI - Semantic Kernel with local Ollama
-var ollamaUrl = builder.Configuration["AI:OllamaUrl"] ?? "http://localhost:11434";
-var ollamaModel = builder.Configuration["AI:Model"] ?? "llama3.2";
+// AI - Semantic Kernel with local Ollama or Groq/OpenAI
+var aiUrl = builder.Configuration["AI:OllamaUrl"] ?? "http://localhost:11434";
+var aiModel = builder.Configuration["AI:Model"] ?? "llama3.2";
+var aiApiKey = builder.Configuration["AI:ApiKey"];
 
-// Manually create OllamaApiClient with custom HttpClient (10-minute timeout for slow VPS)
 builder.Services.AddSingleton<Microsoft.Extensions.AI.IChatClient>(sp =>
 {
-    var httpClient = new HttpClient
+    if (!string.IsNullOrEmpty(aiApiKey))
     {
-        BaseAddress = new Uri(ollamaUrl),
-        Timeout = TimeSpan.FromMinutes(10) // 10 minutes for slow Ollama on VPS
-    };
-    
-    var ollamaClient = new OllamaSharp.OllamaApiClient(httpClient)
+        Log.Information("Using Groq/OpenAI AI provider with model: {Model}", aiModel);
+        // Using Groq or other OpenAI-compatible provider
+        return new OpenAI.Chat.ChatClient(aiModel, aiApiKey, new OpenAI.OpenAIClientOptions 
+        { 
+            Endpoint = new Uri(aiUrl) 
+        })
+        .AsChatClient();
+    }
+    else
     {
-        SelectedModel = ollamaModel
-    };
-    
-    return ollamaClient;
+        Log.Information("Using local Ollama AI provider at {Url} with model: {Model}", aiUrl, aiModel);
+        var httpClient = new HttpClient
+        {
+            BaseAddress = new Uri(aiUrl),
+            Timeout = TimeSpan.FromMinutes(10) // 10 minutes for slow Ollama on VPS
+        };
+        
+        return new OllamaSharp.OllamaApiClient(httpClient)
+        {
+            SelectedModel = aiModel
+        };
+    }
 });
 
 builder.Services.AddKernel();

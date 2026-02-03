@@ -12,6 +12,8 @@ public interface IAnalyticsService
     Task<PeriodComparisonDto> ComparePeriodAsync(string tenantId, Guid storeId, DateTime periodStart, DateTime periodEnd);
     Task<IEnumerable<LowStockAlertDto>> GetLowStockAlertsAsync(string tenantId, Guid storeId);
     Task<InventoryInsightReportDto> GetInventoryInsightsAsync(string tenantId, Guid storeId, bool generateAi = false);
+    Task TriggerInventoryAnalysisAsync(string tenantId, Guid storeId);
+    Task TriggerDailySummariesAsync(string tenantId, Guid storeId);
     Task GenerateDailySummariesAsync(string tenantId, Guid storeId, bool skipAi = false);
     Task<IEnumerable<SmartSummaryDto>> GetLatestSummariesAsync(string tenantId, Guid storeId, int count = 5, string? type = null);
 }

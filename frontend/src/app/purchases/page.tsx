@@ -46,12 +46,46 @@ export default function PurchasesPage() {
   const [filterStoreId, setFilterStoreId] = useState(''); // Initialized later with user.currentStoreId
 
   const { data: purchases, isLoading, refetch } = usePurchases(filterStoreId);
+  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
 
   useEffect(() => {
     if (user?.currentStoreId && !filterStoreId) {
       setFilterStoreId(user.currentStoreId);
     }
   }, [user?.currentStoreId, filterStoreId]);
+
+  // Handle incoming suggested purchase from AI
+  useEffect(() => {
+    if (!searchParams) return;
+
+    const productId = searchParams.get('productId');
+    const productName = searchParams.get('productName');
+    const quantity = searchParams.get('quantity');
+    const unitPrice = searchParams.get('price');
+    const uomId = searchParams.get('uomId');
+
+    if (productId && productName && quantity && unitPrice) {
+      // Small delay to ensure stores/suppliers are loaded if needed
+      setTimeout(() => {
+        setDetails([{
+          productId,
+          uomId: uomId || '',
+          quantity: parseFloat(quantity),
+          unitPrice: parseFloat(unitPrice)
+        }]);
+
+        // Also update selectedProducts map so the table can show the name
+        const productInfo: any = { id: productId, name: productName };
+        setSelectedProducts(new Map([[productId, productInfo]]));
+
+        toast.info(`Pre-cargada sugerencia para: ${productName}`);
+
+        // Clear params to avoid re-triggering on refresh
+        window.history.replaceState({}, '', window.location.pathname);
+      }, 500);
+    }
+  }, [searchParams]);
+
   const [formData, setFormData] = useState({
     storeId: user?.currentStoreId || '', // Added
     supplierId: '',

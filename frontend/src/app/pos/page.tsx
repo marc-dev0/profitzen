@@ -667,6 +667,7 @@ export default function POSPage() {
       const payload = {
         customerId: selectedCustomerId || null,
         notes: null,
+        cashierName: user?.fullName || 'Usuario',
         documentType: documentType,
         items: cart.map(item => ({
           productId: item.productId,

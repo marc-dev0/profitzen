@@ -66,16 +66,23 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
     const isActive = (path: string | undefined): boolean => {
         if (!path || !pathname) return false;
 
-        // Exact match
+        // Exact match is top priority
         if (pathname === path) return true;
 
-        // Deepest match logic
+        // For nested routes, ensure we pick the most specific one
         if (pathname.startsWith(path + '/')) {
-            // Find if there is a more specific child active
-            const hasMoreSpecificChild = menuModules?.flatMap(i => i.children || [])
-                .some(c => c.route && pathname.startsWith(c.route + '/'));
+            const allRoutes = menuModules?.flatMap(m => [
+                m.route,
+                ...(m.children?.map(c => c.route) || [])
+            ]).filter(Boolean) as string[];
 
-            return !hasMoreSpecificChild;
+            const hasBetterMatch = allRoutes.some(r =>
+                r !== path &&
+                (pathname === r || pathname.startsWith(r + '/')) &&
+                r.length > path.length
+            );
+
+            return !hasBetterMatch;
         }
 
         return false;

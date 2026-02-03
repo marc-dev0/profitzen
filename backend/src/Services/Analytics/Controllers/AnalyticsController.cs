@@ -129,6 +129,15 @@ public class AnalyticsController : ControllerBase
         return Ok(insights);
     }
 
+    [HttpPost("inventory/insights/trigger")]
+    public async Task<IActionResult> TriggerInventoryInsights()
+    {
+        var tenantId = GetCurrentTenantId();
+        var storeId = GetCurrentStoreId();
+        await _analyticsService.TriggerInventoryAnalysisAsync(tenantId, storeId);
+        return Accepted();
+    }
+
     [HttpPost("generate-summaries")]
     public async Task<IActionResult> GenerateSummaries()
     {
@@ -136,13 +145,13 @@ public class AnalyticsController : ControllerBase
         {
             var tenantId = GetCurrentTenantId();
             var storeId = GetCurrentStoreId();
-            await _analyticsService.GenerateDailySummariesAsync(tenantId, storeId);
-            return Ok(new { message = "Summaries generated successfully" });
+            await _analyticsService.TriggerDailySummariesAsync(tenantId, storeId);
+            return Accepted();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error generating summaries");
-            return BadRequest(new { error = "An error occurred while generating summaries." });
+            _logger.LogError(ex, "Error triggering summaries");
+            return BadRequest(new { error = "An error occurred while triggering summaries." });
         }
     }
 

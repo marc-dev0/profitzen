@@ -5,6 +5,7 @@ using Profitzen.Analytics.Infrastructure;
 using System.Data;
 using Microsoft.SemanticKernel;
 using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
 
 namespace Profitzen.Analytics.Application.Services;
 
@@ -13,12 +14,16 @@ public class AnalyticsService : IAnalyticsService
     private readonly AnalyticsDbContext _context;
     private readonly Kernel _kernel;
     private readonly ILogger<AnalyticsService> _logger;
+    private readonly IServiceScopeFactory _scopeFactory;
 
-    public AnalyticsService(AnalyticsDbContext context, Kernel kernel, ILogger<AnalyticsService> logger)
+    private static readonly ConcurrentDictionary<string, bool> _processingTasks = new();
+
+    public AnalyticsService(AnalyticsDbContext context, Kernel kernel, ILogger<AnalyticsService> logger, IServiceScopeFactory scopeFactory)
     {
         _context = context;
         _kernel = kernel;
         _logger = logger;
+        _scopeFactory = scopeFactory;
     }
 
     public async Task<DashboardDto> GetDashboardAsync(string tenantId, Guid storeId)
@@ -599,6 +604,7 @@ public class AnalyticsService : IAnalyticsService
                                 p.ProductCode,
                                 p.ProductName,
                                 quantityToOrder,
+                                stockInfo.price,
                                 quantityToOrder * stockInfo.price,
                                 $"Consumo diario de {Math.Round(dailyRate, 2)} unidades. Se sugiere comprar para cubrir {targetDays} días."
                             ));
@@ -683,11 +689,14 @@ public class AnalyticsService : IAnalyticsService
                 aiSummary = "Presiona 'Recalcular Inteligencia' para obtener un análisis estratégico detallado.";
             }
 
+            var isProcessing = _processingTasks.ContainsKey($"{tenantId}-{storeId}-Inventory");
+
             return new InventoryInsightReportDto(
                 atRisk.OrderBy(a => a.EstimatedDaysRemaining).ToList(),
                 deadStock,
                 suggestedPurchases.OrderByDescending(s => s.EstimatedCost).ToList(),
-                aiSummary
+                aiSummary,
+                isProcessing
             );
         }
         finally
@@ -766,6 +775,72 @@ public class AnalyticsService : IAnalyticsService
 
         return alerts;
     }
+
+    public async Task TriggerInventoryAnalysisAsync(string tenantId, Guid storeId)
+    {
+        var key = $"{tenantId}-{storeId}-Inventory";
+        if (_processingTasks.ContainsKey(key)) return;
+
+        _processingTasks.TryAdd(key, true);
+
+        // Start background work
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                // We need a NEW scope because the original one will be disposed
+                using var scope = _scopeFactory.CreateScope();
+                var scopedService = scope.ServiceProvider.GetRequiredService<IAnalyticsService>();
+                
+                _logger.LogInformation("Starting background AI inventory analysis for {Key}", key);
+                await scopedService.GetInventoryInsightsAsync(tenantId, storeId, generateAi: true);
+                _logger.LogInformation("Background AI inventory analysis COMPLETED for {Key}", key);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in background AI inventory analysis for {Key}", key);
+            }
+            finally
+            {
+                _processingTasks.TryRemove(key, out _);
+            }
+        });
+
+        await Task.CompletedTask;
+    }
+
+    public async Task TriggerDailySummariesAsync(string tenantId, Guid storeId)
+    {
+        var key = $"{tenantId}-{storeId}-DailySummary";
+        if (_processingTasks.ContainsKey(key)) return;
+
+        _processingTasks.TryAdd(key, true);
+
+        // Start background work
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var scopedService = scope.ServiceProvider.GetRequiredService<IAnalyticsService>();
+                
+                _logger.LogInformation("Starting background Daily Summary generation for {Key}", key);
+                await scopedService.GenerateDailySummariesAsync(tenantId, storeId);
+                _logger.LogInformation("Background Daily Summary generation COMPLETED for {Key}", key);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in background Daily Summary generation for {Key}", key);
+            }
+            finally
+            {
+                _processingTasks.TryRemove(key, out _);
+            }
+        });
+
+        await Task.CompletedTask;
+    }
+
     public async Task GenerateDailySummariesAsync(string tenantId, Guid storeId, bool skipAi = false)
     {
         Console.WriteLine($"[Analytics] Starting generation for Tenant: {tenantId}, Store: {storeId}");

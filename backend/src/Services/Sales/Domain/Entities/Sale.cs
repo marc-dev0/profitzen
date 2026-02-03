@@ -9,6 +9,7 @@ public class Sale : BaseEntity
     public string SaleNumber { get; private set; } = string.Empty;
     public Guid StoreId { get; private set; }
     public Guid CashierId { get; private set; }
+    public string CashierName { get; private set; } = "Usuario";
     public Guid? CustomerId { get; private set; }
     public DateTime SaleDate { get; private set; }
     public decimal Subtotal { get; private set; }
@@ -28,12 +29,13 @@ public class Sale : BaseEntity
 
     private Sale() { }
 
-    public Sale(string tenantId, Guid storeId, Guid cashierId, Guid? customerId = null, string? notes = null, string? documentType = null)
+    public Sale(string tenantId, Guid storeId, Guid cashierId, string cashierName, Guid? customerId = null, string? notes = null, string? documentType = null)
     {
         TenantId = tenantId;
         SaleNumber = GenerateSaleNumber();
         StoreId = storeId;
         CashierId = cashierId;
+        CashierName = cashierName;
         CustomerId = customerId;
         SaleDate = DateTime.UtcNow;
         Status = SaleStatus.Pending;

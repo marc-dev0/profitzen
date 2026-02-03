@@ -117,7 +117,8 @@ public class SalesService : ISalesService
                 }
             }
 
-            var sale = new Sale(tenantId, storeId, cashierId, request.CustomerId, request.Notes, request.DocumentType);
+            var cashierName = request.CashierName ?? "Usuario";
+            var sale = new Sale(tenantId, storeId, cashierId, cashierName, request.CustomerId, request.Notes, request.DocumentType);
             
             // Add items if provided
             if (request.Items != null && request.Items.Any())
@@ -919,6 +920,7 @@ public class SalesService : ISalesService
             sale.SaleNumber,
             sale.StoreId,
             sale.CashierId,
+            sale.CashierName,
             sale.CustomerId,
             sale.Customer?.Name,
             sale.SaleDate,
@@ -1035,7 +1037,7 @@ public class SalesService : ISalesService
                     col.Item().AlignCenter().Text(docNumberText);
                     
                     col.Item().PaddingTop(5).Text($"Fecha: {sale.SaleDate.ToLocalTime():dd/MM/yyyy HH:mm}");
-                    col.Item().Text($"Cajero: {settings.CashierName ?? "Usuario"}");
+                    col.Item().Text($"Cajero: {sale.CashierName ?? settings.CashierName ?? "Usuario"}");
                     col.Item().Text($"Cliente: {sale.CustomerName ?? "Público General"}");
 
                     col.Item().PaddingVertical(5).LineHorizontal(1).LineColor(Colors.Black);

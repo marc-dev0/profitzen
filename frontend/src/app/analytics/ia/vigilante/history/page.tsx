@@ -18,13 +18,20 @@ export default function VigilanteHistoryPage() {
     const { user } = useAuthStore();
     const { data: summaries, isLoading } = useSmartSummaries(20, user?.currentStoreId, 'DailyInsight');
 
-    const formatDate = (date: string) => {
-        return new Date(date).toLocaleDateString('es-PE', {
+    const formatDateTime = (date: string) => {
+        const d = new Date(date);
+        const dateStr = d.toLocaleDateString('es-PE', {
             weekday: 'long',
             year: 'numeric',
             month: 'long',
             day: 'numeric'
         });
+        const timeStr = d.toLocaleTimeString('es-PE', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+        return { dateStr, timeStr };
     };
 
     return (
@@ -57,8 +64,10 @@ export default function VigilanteHistoryPage() {
                                     <div className="p-2 bg-indigo-500/10 rounded-xl">
                                         <Calendar className="w-4 h-4 text-indigo-500" />
                                     </div>
-                                    <span className="text-xs font-black text-indigo-500 uppercase tracking-widest">
-                                        {formatDate(s.createdAt)}
+                                    <span className="text-xs font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2">
+                                        {formatDateTime(s.createdAt).dateStr}
+                                        <span className="w-1 h-1 rounded-full bg-indigo-500/30" />
+                                        <span className="text-indigo-400">{formatDateTime(s.createdAt).timeStr}</span>
                                     </span>
                                 </div>
                                 <div className="text-lg text-foreground/80 leading-relaxed italic border-l-4 border-indigo-500/30 pl-6 py-1">

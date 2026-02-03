@@ -101,6 +101,7 @@ export interface SuggestedPurchase {
   productCode: string;
   productName: string;
   quantityToOrder: number;
+  unitPrice: number;
   estimatedCost: number;
   reason: string;
 }

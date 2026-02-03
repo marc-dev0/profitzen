@@ -50,6 +50,7 @@ interface Sale {
     saleNumber: string;
     storeId: string;
     cashierId: string;
+    cashierName: string;
     customerId: string | null;
     customerName: string | null;
     saleDate: string;
@@ -248,7 +249,7 @@ function SalesContent() {
                 LogoUrl: companySettings?.logoUrl,
                 ShowLogo: companySettings?.showLogo ?? true,
                 TicketWidth: companySettings?.ticketWidth || 80,
-                CashierName: user?.fullName || 'Usuario'
+                CashierName: sale.cashierName || 'Usuario'
             };
 
             const response = await apiClient.post(
