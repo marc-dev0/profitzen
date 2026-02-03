@@ -52,22 +52,30 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-// Configure all HttpClients with extended timeout for slow AI responses
-builder.Services.ConfigureHttpClientDefaults(http =>
-{
-    http.ConfigureHttpClient(client =>
-    {
-        client.Timeout = TimeSpan.FromMinutes(10); // 10 minutes for slow Ollama on VPS
-    });
-});
-
 builder.Services.AddHttpClient();
 
 // AI - Semantic Kernel with local Ollama
 var ollamaUrl = builder.Configuration["AI:OllamaUrl"] ?? "http://localhost:11434";
 var ollamaModel = builder.Configuration["AI:Model"] ?? "llama3.2";
-builder.Services.AddKernel()
-                .AddOllamaChatCompletion(ollamaModel, new Uri(ollamaUrl));
+
+// Manually create OllamaApiClient with custom HttpClient (10-minute timeout for slow VPS)
+builder.Services.AddSingleton<Microsoft.Extensions.AI.IChatClient>(sp =>
+{
+    var httpClient = new HttpClient
+    {
+        BaseAddress = new Uri(ollamaUrl),
+        Timeout = TimeSpan.FromMinutes(10) // 10 minutes for slow Ollama on VPS
+    };
+    
+    var ollamaClient = new OllamaSharp.OllamaApiClient(httpClient)
+    {
+        SelectedModel = ollamaModel
+    };
+    
+    return ollamaClient;
+});
+
+builder.Services.AddKernel();
 
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 builder.Services.AddAuthorization();
