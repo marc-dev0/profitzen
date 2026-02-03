@@ -60,6 +60,7 @@ var aiUrl = builder.Configuration["AI:OllamaUrl"] ?? "http://localhost:11434";
 var aiModel = builder.Configuration["AI:Model"] ?? "llama3.2";
 var aiApiKey = builder.Configuration["AI:ApiKey"];
 
+#pragma warning disable SKEXP0010, SKEXP0070
 if (!string.IsNullOrEmpty(aiApiKey))
 {
     Log.Information("Registering Groq/OpenAI with Semantic Kernel. Model: {Model}", aiModel);
@@ -77,6 +78,7 @@ else
         endpoint: new Uri(aiUrl)
     );
 }
+#pragma warning restore SKEXP0010, SKEXP0070
 
 // Still register IChatClient for other parts of the system if needed
 builder.Services.AddSingleton<Microsoft.Extensions.AI.IChatClient>(sp =>
