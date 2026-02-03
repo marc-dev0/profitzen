@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import AppLayout from '@/components/layout/AppLayout';
 import { useAuthStore } from '@/store/authStore';
 import { useSmartSummaries } from '@/hooks/useAnalytics';
@@ -9,14 +9,27 @@ import {
     Sparkles,
     ChevronRight,
     Calendar,
-    ArrowLeft
+    ArrowLeft,
+    RefreshCw
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export default function VigilanteHistoryPage() {
     const router = useRouter();
     const { user } = useAuthStore();
-    const { data: summaries, isLoading } = useSmartSummaries(20, user?.currentStoreId, 'DailyInsight');
+    const { data: summaries, isLoading, refetch } = useSmartSummaries(20, user?.currentStoreId, 'DailyInsight');
+    const [isRefreshing, setIsRefreshing] = useState(false);
+
+    // Poll for updates while the page is open
+    useEffect(() => {
+        const interval = setInterval(async () => {
+            setIsRefreshing(true);
+            await refetch();
+            setIsRefreshing(false);
+        }, 10000); // Poll every 10 seconds for history
+
+        return () => clearInterval(interval);
+    }, [refetch]);
 
     const formatDateTime = (date: string) => {
         const d = new Date(date);
@@ -44,8 +57,16 @@ export default function VigilanteHistoryPage() {
                     >
                         <ArrowLeft className="w-6 h-6" />
                     </button>
-                    <div>
-                        <h1 className="text-3xl font-black tracking-tight text-foreground uppercase">Bitácora del Vigilante</h1>
+                    <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                            <h1 className="text-3xl font-black tracking-tight text-foreground uppercase">Bitácora del Vigilante</h1>
+                            {isRefreshing && (
+                                <div className="flex items-center gap-2 text-[10px] font-black text-indigo-500 uppercase tracking-widest animate-pulse">
+                                    <RefreshCw className="w-3 h-3 animate-spin" />
+                                    Actualizando...
+                                </div>
+                            )}
+                        </div>
                         <p className="text-muted-foreground font-medium">Historial completo de consejos estratégicos</p>
                     </div>
                 </div>

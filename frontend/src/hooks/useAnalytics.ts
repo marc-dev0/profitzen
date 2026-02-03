@@ -1,6 +1,6 @@
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/lib/axios';
-import type { DashboardData } from '@/types/analytics';
+import type { DashboardData, SmartSummary } from '@/types/analytics';
 
 export function useDashboard(storeId?: string) {
   return useQuery<DashboardData>({
@@ -53,10 +53,16 @@ export function useSmartSummaries(count: number = 5, storeId?: string, type?: st
 }
 
 export function useRecalculateAnalytics() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async (storeId?: string) => {
       const response = await apiClient.post(`/api/analytics/generate-summaries${storeId ? `?storeId=${storeId}` : ''}`);
       return response.data;
+    },
+    onSuccess: () => {
+      // Invalidate all variants of smart-summaries (dashboard, history, etc.)
+      queryClient.invalidateQueries({ queryKey: ['smart-summaries'] });
     }
   });
 }
