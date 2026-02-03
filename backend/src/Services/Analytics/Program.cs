@@ -5,6 +5,7 @@ using Profitzen.Analytics.Application.Services;
 using Profitzen.Analytics.Infrastructure;
 using Profitzen.Common.Extensions;
 using Microsoft.SemanticKernel;
+using Microsoft.Extensions.AI;
 using System.Text;
 using Serilog;
 
