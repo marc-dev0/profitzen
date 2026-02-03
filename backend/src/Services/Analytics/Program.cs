@@ -65,7 +65,7 @@ builder.Services.AddSingleton<Microsoft.Extensions.AI.IChatClient>(sp =>
     {
         Log.Information("Using Groq/OpenAI AI provider with model: {Model}", aiModel);
         // Using Groq or other OpenAI-compatible provider
-        return new OpenAI.Chat.ChatClient(aiModel, aiApiKey, new OpenAI.OpenAIClientOptions 
+        return new OpenAI.Chat.ChatClient(aiModel, new System.ClientModel.ApiKeyCredential(aiApiKey), new OpenAI.OpenAIClientOptions 
         { 
             Endpoint = new Uri(aiUrl) 
         })
