@@ -165,38 +165,51 @@ export default function IntelligentAnalyzerPage() {
                             : <BrainCircuit className="w-40 h-40" />
                         }
                     </div>
-                    <div className="relative z-10 flex items-start gap-4">
-                        <div className={`p-3 rounded-xl border ${insights?.aiSummary?.includes('Error') || insights?.aiSummary?.includes('⚠️')
-                                ? 'bg-red-500/20 border-red-500/40'
-                                : 'bg-white/10 border-white/20'
-                            }`}>
-                            {insights?.aiSummary?.includes('Error') || insights?.aiSummary?.includes('⚠️')
-                                ? <AlertTriangle className="w-8 h-8 text-red-400" />
-                                : <Sparkles className="w-8 h-8 text-blue-400" />
-                            }
-                        </div>
-                        <div>
-                            <h3 className="text-lg font-bold mb-2 flex items-center gap-2">
+                    <div className="relative z-10 flex flex-col gap-4">
+                        <div className="flex items-start gap-4">
+                            <div className={`p-3 rounded-xl border ${insights?.aiSummary?.includes('Error') || insights?.aiSummary?.includes('⚠️')
+                                    ? 'bg-red-500/20 border-red-500/40'
+                                    : 'bg-white/10 border-white/20'
+                                }`}>
                                 {insights?.aiSummary?.includes('Error') || insights?.aiSummary?.includes('⚠️')
-                                    ? 'Error en el Análisis'
-                                    : 'Resumen del Analizador'
+                                    ? <AlertTriangle className="w-8 h-8 text-red-400" />
+                                    : <Sparkles className="w-8 h-8 text-blue-400" />
                                 }
-                            </h3>
-                            <p className={`${insights?.aiSummary?.includes('Error') || insights?.aiSummary?.includes('⚠️')
-                                    ? 'text-red-100'
-                                    : 'text-blue-100'
-                                } text-lg leading-relaxed max-w-4xl`}>
-                                {insights?.aiSummary || (analyzing ? "El cerebro artificial de Profitzen está procesando miles de datos para darte la mejor estrategia..." : "Analizando comportamiento de ventas para generar recomendaciones...")}
-                            </p>
-                            {insights?.aiSummary?.includes('Error') || insights?.aiSummary?.includes('⚠️') && (
+                            </div>
+                            <div className="flex-1">
+                                <div className="flex items-center justify-between mb-2">
+                                    <h3 className="text-lg font-bold flex items-center gap-2">
+                                        {insights?.aiSummary?.includes('Error') || insights?.aiSummary?.includes('⚠️')
+                                            ? 'Error en el Análisis'
+                                            : 'Resumen del Analizador'
+                                        }
+                                    </h3>
+                                    {!analyzing && (
+                                        <div className="flex items-center gap-2 text-[10px] font-bold text-white/50 uppercase tracking-widest bg-white/5 px-2 py-1 rounded-md">
+                                            <Clock className="w-3 h-3" />
+                                            Actualizado: {new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
+                                        </div>
+                                    )}
+                                </div>
+                                <p className={`${insights?.aiSummary?.includes('Error') || insights?.aiSummary?.includes('⚠️')
+                                        ? 'text-red-100'
+                                        : 'text-blue-100'
+                                    } text-lg leading-relaxed max-w-4xl italic`}>
+                                    "{insights?.aiSummary || (analyzing ? "El cerebro artificial de Profitzen está procesando miles de datos para darte la mejor estrategia..." : "Analizando comportamiento de ventas para generar recomendaciones...")}"
+                                </p>
+                            </div>
+                        </div>
+
+                        {(insights?.aiSummary?.includes('Error') || insights?.aiSummary?.includes('⚠️')) && (
+                            <div className="flex justify-end">
                                 <button
                                     onClick={() => runFullAnalysis()}
-                                    className="mt-4 px-4 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-sm font-bold transition-colors"
+                                    className="px-4 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-sm font-bold transition-colors"
                                 >
                                     Reintentar Análisis
                                 </button>
-                            )}
-                        </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 
