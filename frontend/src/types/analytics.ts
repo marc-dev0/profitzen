@@ -111,4 +111,16 @@ export interface InventoryInsightReport {
   deadStock: ProductPerformance[];
   purchaseRecommendations: SuggestedPurchase[];
   aiSummary: string;
+  isAiProcessing?: boolean;
+}
+
+export interface SmartSummary {
+  id: string;
+  tenantId: string;
+  storeId: string;
+  date: string;
+  section: string;
+  content: string;
+  type: 'Insight' | 'Error' | 'Warning' | 'Opportunity';
+  createdAt: string;
 }

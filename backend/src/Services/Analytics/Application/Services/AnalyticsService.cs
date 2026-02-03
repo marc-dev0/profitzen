@@ -681,7 +681,24 @@ public class AnalyticsService : IAnalyticsService
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error invoking AI prompt for inventory insights");
-                    aiSummary = $"Análisis completado. Tienes {atRisk.Count(r => r.RiskLevel == "Critical")} productos en estado crítico. Se recomienda revisar las órdenes de compra urgentes.";
+                    aiSummary = $"⚠️ **Error de IA:** No pudimos generar el resumen estratégico en este momento. {ex.Message}";
+                    
+                    // Save the error as a temporary summary so user sees the failure
+                    try {
+                        var errorSummary = new Profitzen.Analytics.Domain.Entities.SmartSummary
+                        {
+                            Id = Guid.NewGuid(),
+                            TenantId = tenantId,
+                            StoreId = storeId,
+                            Date = DateTime.SpecifyKind(DateTime.Today, DateTimeKind.Utc),
+                            Section = "Analizador de Inventario",
+                            Content = aiSummary,
+                            Type = "Error",
+                            CreatedAt = DateTime.UtcNow
+                        };
+                        _context.SmartSummaries.Add(errorSummary);
+                        await _context.SaveChangesAsync();
+                    } catch { /* Ignore secondary errors */ }
                 }
             }
             else if (string.IsNullOrEmpty(aiSummary))

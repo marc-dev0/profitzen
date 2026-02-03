@@ -41,7 +41,7 @@ export function useProductPerformance(storeId?: string) {
 }
 
 export function useSmartSummaries(count: number = 5, storeId?: string, type?: string) {
-  return useQuery<any[]>({
+  return useQuery<import('@/types/analytics').SmartSummary[]>({
     queryKey: ['smart-summaries', storeId, count, type],
     queryFn: async () => {
       const typeQuery = type ? `&type=${type}` : '';

@@ -155,21 +155,47 @@ export default function IntelligentAnalyzerPage() {
                 </div>
 
                 {/* AI Summary Banner */}
-                <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950 rounded-2xl p-6 mb-8 text-white shadow-xl relative overflow-hidden">
+                <div className={`rounded-2xl p-6 mb-8 text-white shadow-xl relative overflow-hidden transition-all ${insights?.aiSummary?.includes('Error') || insights?.aiSummary?.includes('⚠️')
+                        ? 'bg-gradient-to-br from-red-900 to-red-950 border border-red-500/30'
+                        : 'bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950'
+                    }`}>
                     <div className="absolute top-0 right-0 p-8 opacity-10">
-                        <BrainCircuit className="w-40 h-40" />
+                        {insights?.aiSummary?.includes('Error') || insights?.aiSummary?.includes('⚠️')
+                            ? <AlertTriangle className="w-40 h-40" />
+                            : <BrainCircuit className="w-40 h-40" />
+                        }
                     </div>
                     <div className="relative z-10 flex items-start gap-4">
-                        <div className="bg-white/10 p-3 rounded-xl border border-white/20">
-                            <Sparkles className="w-8 h-8 text-blue-400" />
+                        <div className={`p-3 rounded-xl border ${insights?.aiSummary?.includes('Error') || insights?.aiSummary?.includes('⚠️')
+                                ? 'bg-red-500/20 border-red-500/40'
+                                : 'bg-white/10 border-white/20'
+                            }`}>
+                            {insights?.aiSummary?.includes('Error') || insights?.aiSummary?.includes('⚠️')
+                                ? <AlertTriangle className="w-8 h-8 text-red-400" />
+                                : <Sparkles className="w-8 h-8 text-blue-400" />
+                            }
                         </div>
                         <div>
                             <h3 className="text-lg font-bold mb-2 flex items-center gap-2">
-                                Resumen del Analizador
+                                {insights?.aiSummary?.includes('Error') || insights?.aiSummary?.includes('⚠️')
+                                    ? 'Error en el Análisis'
+                                    : 'Resumen del Analizador'
+                                }
                             </h3>
-                            <p className="text-blue-100 text-lg leading-relaxed max-w-4xl">
+                            <p className={`${insights?.aiSummary?.includes('Error') || insights?.aiSummary?.includes('⚠️')
+                                    ? 'text-red-100'
+                                    : 'text-blue-100'
+                                } text-lg leading-relaxed max-w-4xl`}>
                                 {insights?.aiSummary || (analyzing ? "El cerebro artificial de Profitzen está procesando miles de datos para darte la mejor estrategia..." : "Analizando comportamiento de ventas para generar recomendaciones...")}
                             </p>
+                            {insights?.aiSummary?.includes('Error') || insights?.aiSummary?.includes('⚠️') && (
+                                <button
+                                    onClick={() => runFullAnalysis()}
+                                    className="mt-4 px-4 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-sm font-bold transition-colors"
+                                >
+                                    Reintentar Análisis
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>

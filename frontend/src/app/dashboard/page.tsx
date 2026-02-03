@@ -211,23 +211,39 @@ export default function DashboardPage() {
             </button>
           </div>
         ) : summaries && summaries.length > 0 ? (
-          <div className="bg-gradient-to-br from-slate-900 to-indigo-950 border border-slate-800 rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden group">
+          <div className={`border rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden group transition-all ${summaries[0].type === 'Error' || summaries[0].content.includes('⚠️') || summaries[0].content.includes('Error')
+              ? 'bg-gradient-to-br from-red-900 to-red-950 border-red-500/30'
+              : 'bg-gradient-to-br from-slate-900 to-indigo-950 border-slate-800'
+            }`}>
             {/* Background elements */}
             <div className="absolute top-0 right-0 p-12 opacity-10 transform group-hover:scale-125 transition-transform duration-700">
-              <Sparkles className="w-32 h-32 text-indigo-400" />
+              {summaries[0].type === 'Error' || summaries[0].content.includes('⚠️') || summaries[0].content.includes('Error')
+                ? <AlertTriangle className="w-32 h-32 text-red-400" />
+                : <Sparkles className="w-32 h-32 text-indigo-400" />
+              }
             </div>
-            <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl" />
 
             <div className="relative z-10 flex flex-col lg:flex-row gap-8 items-start">
               <div className="flex-shrink-0">
-                <div className="w-14 h-14 rounded-2xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
-                  <Sparkles className="w-7 h-7 text-indigo-400 animate-pulse" />
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center border ${summaries[0].type === 'Error' || summaries[0].content.includes('⚠️') || summaries[0].content.includes('Error')
+                    ? 'bg-red-500/20 border-red-500/30'
+                    : 'bg-indigo-500/20 border-indigo-500/30'
+                  }`}>
+                  {summaries[0].type === 'Error' || summaries[0].content.includes('⚠️') || summaries[0].content.includes('Error')
+                    ? <AlertTriangle className="w-7 h-7 text-red-400" />
+                    : <Sparkles className="w-7 h-7 text-indigo-400 animate-pulse" />
+                  }
                 </div>
               </div>
 
               <div className="flex-1 space-y-4">
                 <div className="flex items-center gap-3">
-                  <span className="text-xs font-black text-indigo-400 uppercase tracking-[0.2em]">IA Insight • {summaries[0].section}</span>
+                  <span className={`text-xs font-black uppercase tracking-[0.2em] ${summaries[0].type === 'Error' || summaries[0].content.includes('⚠️') || summaries[0].content.includes('Error')
+                      ? 'text-red-400'
+                      : 'text-indigo-400'
+                    }`}>
+                    {summaries[0].type === 'Error' ? '⚠️ Error de IA' : 'IA Insight'} • {summaries[0].section}
+                  </span>
                   <span className="w-1 h-1 rounded-full bg-slate-700" />
                   <span className="text-[10px] font-bold text-slate-500 uppercase">
                     {new Date(summaries[0].createdAt).toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })} •
@@ -236,7 +252,10 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="space-y-6">
-                  <div className="text-xl md:text-2xl font-medium text-slate-100 leading-relaxed italic border-l-4 border-indigo-500 pl-6 py-2">
+                  <div className={`text-xl md:text-2xl font-medium leading-relaxed italic border-l-4 pl-6 py-2 ${summaries[0].type === 'Error' || summaries[0].content.includes('⚠️') || summaries[0].content.includes('Error')
+                      ? 'text-red-100 border-red-500'
+                      : 'text-slate-100 border-indigo-500'
+                    }`}>
                     {summaries[0].content.split('\n').map((line: string, i: number) => line && (
                       <p key={i} className={i > 0 ? 'mt-4' : ''}>{line}</p>
                     ))}
@@ -251,7 +270,6 @@ export default function DashboardPage() {
                         await recalculate.mutateAsync(user?.currentStoreId);
                         toast.success('¡Proceso iniciado! Se actualizará en breve.', { id: t });
 
-                        // Poll for updates every 5 seconds for 2 minutes
                         let attempts = 0;
                         const interval = setInterval(async () => {
                           attempts++;
@@ -264,10 +282,13 @@ export default function DashboardPage() {
                       }
                     }}
                     disabled={recalculate.isPending}
-                    className="px-5 py-2.5 bg-indigo-500/20 hover:bg-indigo-500/40 text-indigo-300 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all border border-indigo-500/30"
+                    className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all border ${summaries[0].type === 'Error' || summaries[0].content.includes('⚠️') || summaries[0].content.includes('Error')
+                        ? 'bg-red-500/20 hover:bg-red-500/40 text-red-300 border-red-500/30'
+                        : 'bg-indigo-500/20 hover:bg-indigo-500/40 text-indigo-300 border-indigo-500/30'
+                      }`}
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${recalculate.isPending ? 'animate-spin' : ''}`} />
-                    {recalculate.isPending ? 'Iniciando...' : 'Pedir nuevo consejo'}
+                    {recalculate.isPending ? 'Iniciando...' : 'Reintentar Análisis'}
                   </button>
 
                   <button
