@@ -148,6 +148,9 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
                     {isExpanded && (
                         <div className="ml-4 pl-4 border-l border-slate-800 space-y-1 py-1">
                             {module.children.map((child) => {
+                                // Commenting out the AI Analyzer item to keep the system in Safe Mode
+                                if (child.code === 'analytics_ia') return null;
+
                                 const active = isActive(child.route);
                                 const ChildIcon = getIcon(child.icon);
                                 return (
@@ -162,9 +165,11 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
                                     >
                                         {ChildIcon && <ChildIcon className={`mr-2.5 h-3.5 w-3.5 ${active ? 'text-white' : 'text-slate-600 group-hover:text-white'}`} />}
                                         {child.name}
+                                        {/* 
                                         {child.code === 'analytics_ia' && (
                                             <Sparkles className="ml-auto h-3 w-3 text-yellow-500 animate-pulse" />
                                         )}
+                                        */}
                                     </Link>
                                 );
                             })}

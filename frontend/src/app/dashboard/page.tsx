@@ -160,6 +160,7 @@ export default function DashboardPage() {
             <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
             Sincronizar Tablero
           </button>
+          {/* 
           <button
             onClick={() => router.push('/analytics/ia')}
             className="p-3 bg-primary text-primary-foreground rounded-2xl hover:opacity-90 shadow-lg shadow-primary/20 transition-all flex items-center gap-2 font-bold"
@@ -167,10 +168,12 @@ export default function DashboardPage() {
             <Sparkles className="w-5 h-5" />
             Análisis IA
           </button>
+          */}
         </div>
       </div>
 
-      {/* Vigilante Nocturno - AI Section */}
+      {/* Vigilante Nocturno - AI Section (Temporarily commented for system monitoring) */}
+      {/* 
       <div className="mb-10">
         {!loadingSummaries && (!summaries || summaries.length === 0) ? (
           <div className="bg-gradient-to-r from-indigo-500/5 to-purple-500/5 border border-indigo-500/10 rounded-[2.5rem] p-8 flex flex-col md:flex-row items-center justify-between gap-6 group hover:border-indigo-500/30 transition-all duration-500">
@@ -190,7 +193,6 @@ export default function DashboardPage() {
                   await recalculate.mutateAsync(user?.currentStoreId);
                   toast.success('¡Proceso iniciado! El consejo aparecerá en unos momentos.', { id: t });
 
-                  // Poll for updates every 5 seconds for the next 2 minutes (24 attempts)
                   let attempts = 0;
                   const interval = setInterval(async () => {
                     attempts++;
@@ -215,7 +217,6 @@ export default function DashboardPage() {
               ? 'bg-gradient-to-br from-red-900 to-red-950 border-red-500/30'
               : 'bg-gradient-to-br from-slate-900 to-indigo-950 border-slate-800'
             }`}>
-            {/* Background elements */}
             <div className="absolute top-0 right-0 p-12 opacity-10 transform group-hover:scale-125 transition-transform duration-700">
               {summaries[0].type === 'Error' || summaries[0].content.includes('⚠️') || summaries[0].content.includes('Error')
                 ? <AlertTriangle className="w-32 h-32 text-red-400" />
@@ -304,6 +305,7 @@ export default function DashboardPage() {
           </div>
         ) : null}
       </div>
+      */}
 
       {/* KPI Section - High Impact */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
