@@ -65,11 +65,20 @@ export default function DashboardPage() {
 
   const chartData = useMemo(() => {
     if (!dashboardData?.last30Days) return [];
-    return dashboardData.last30Days.map(d => ({
+    const data = dashboardData.last30Days.map(d => ({
       date: new Date(d.date).toLocaleDateString('es-PE', { day: '2-digit', month: 'short' }),
       revenue: d.totalRevenue,
       profit: d.totalProfit || 0
     }));
+
+    // Si solo hay un punto, agregamos una base de cero para mejor visualización
+    if (data.length === 1) {
+      return [
+        { date: 'Vacio', revenue: 0, profit: 0 },
+        ...data
+      ];
+    }
+    return data;
   }, [dashboardData]);
 
 
@@ -421,6 +430,10 @@ export default function DashboardPage() {
                   contentStyle={{ borderRadius: '1.5rem', border: '1px solid #e2e8f0', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
                   itemStyle={{ fontWeight: 800 }}
                   labelStyle={{ fontWeight: 800, marginBottom: '0.5rem' }}
+                  formatter={(value: any, name: string | undefined) => [
+                    formatCurrency(value),
+                    name === 'revenue' ? 'Ventas' : name === 'profit' ? 'Utilidad' : name || ''
+                  ]}
                 />
                 <Area
                   type="monotone"
