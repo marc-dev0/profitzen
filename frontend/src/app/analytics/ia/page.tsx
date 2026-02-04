@@ -19,12 +19,26 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { InventoryInsightReport, RiskAssessment, SuggestedPurchase, ProductPerformance } from '@/types/analytics';
+import { useSalesReport, useProductPerformance } from '@/hooks/useAnalytics';
+import { useAuthStore } from '@/store/authStore';
 
 export default function IntelligentAnalyzerPage() {
     const router = useRouter();
+    const { user } = useAuthStore();
     const [insights, setInsights] = useState<InventoryInsightReport | null>(null);
     const [loading, setLoading] = useState(true);
     const [analyzing, setAnalyzing] = useState(false);
+
+    // Date Range for ROI/Indicators (Last 30 days)
+    const [fromDate] = useState(() => {
+        const d = new Date();
+        d.setDate(d.getDate() - 30);
+        return d;
+    });
+    const [toDate] = useState(() => new Date());
+
+    const { data: salesReport } = useSalesReport(fromDate, toDate, user?.currentStoreId);
+    const { data: lp } = useProductPerformance(user?.currentStoreId);
 
     useEffect(() => {
         fetchInsights(false);
@@ -156,8 +170,8 @@ export default function IntelligentAnalyzerPage() {
 
                 {/* AI Summary Banner */}
                 <div className={`rounded-2xl p-6 mb-8 text-white shadow-xl relative overflow-hidden transition-all ${insights?.aiSummary?.includes('Error') || insights?.aiSummary?.includes('⚠️')
-                        ? 'bg-gradient-to-br from-red-900 to-red-950 border border-red-500/30'
-                        : 'bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950'
+                    ? 'bg-gradient-to-br from-red-900 to-red-950 border border-red-500/30'
+                    : 'bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950'
                     }`}>
                     <div className="absolute top-0 right-0 p-8 opacity-10">
                         {insights?.aiSummary?.includes('Error') || insights?.aiSummary?.includes('⚠️')
@@ -168,8 +182,8 @@ export default function IntelligentAnalyzerPage() {
                     <div className="relative z-10 flex flex-col gap-4">
                         <div className="flex items-start gap-4">
                             <div className={`p-3 rounded-xl border ${insights?.aiSummary?.includes('Error') || insights?.aiSummary?.includes('⚠️')
-                                    ? 'bg-red-500/20 border-red-500/40'
-                                    : 'bg-white/10 border-white/20'
+                                ? 'bg-red-500/20 border-red-500/40'
+                                : 'bg-white/10 border-white/20'
                                 }`}>
                                 {insights?.aiSummary?.includes('Error') || insights?.aiSummary?.includes('⚠️')
                                     ? <AlertTriangle className="w-8 h-8 text-red-400" />
@@ -192,8 +206,8 @@ export default function IntelligentAnalyzerPage() {
                                     )}
                                 </div>
                                 <p className={`${insights?.aiSummary?.includes('Error') || insights?.aiSummary?.includes('⚠️')
-                                        ? 'text-red-100'
-                                        : 'text-blue-100'
+                                    ? 'text-red-100'
+                                    : 'text-blue-100'
                                     } text-lg leading-relaxed max-w-4xl italic`}>
                                     "{insights?.aiSummary || (analyzing ? "El cerebro artificial de Profitzen está procesando miles de datos para darte la mejor estrategia..." : "Analizando comportamiento de ventas para generar recomendaciones...")}"
                                 </p>
@@ -367,6 +381,62 @@ export default function IntelligentAnalyzerPage() {
                                 en ventas esta semana. Reponer inventario ahora optimizará tu flujo de caja.
                             </p>
                         </div>
+                    </div>
+                </div>
+
+                <div className="mt-12 space-y-8">
+                    <div className="flex items-center gap-3">
+                        <TrendingDown className="w-8 h-8 text-indigo-600 rotate-180" />
+                        <h2 className="text-2xl font-black text-foreground uppercase tracking-tight">Rendimiento Mensual</h2>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {/* ROI Card */}
+                        <div className="bg-slate-900 text-white rounded-[2rem] p-8 shadow-xl relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:scale-110 transition-transform">
+                                <DollarSign className="w-24 h-24" />
+                            </div>
+                            <span className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 block">KPI Estratégico</span>
+                            <h3 className="text-xl font-bold mb-4">Retorno de Inversión</h3>
+                            <div className="flex items-baseline gap-2">
+                                <p className="text-5xl font-black">
+                                    {(salesReport && salesReport.totalCost > 0) ? ((salesReport.totalProfit / salesReport.totalCost) * 100).toFixed(1) : 0}%
+                                </p>
+                                <span className="text-slate-400 font-bold">ROI</span>
+                            </div>
+                            <p className="mt-4 text-sm text-slate-400">Eficiencia de tu capital invertido en los últimos 30 días.</p>
+                        </div>
+
+                        {/* Top Product Card */}
+                        {lp && lp.length > 0 && (
+                            <div className="bg-card border border-border rounded-[2rem] p-8 shadow-sm lg:col-span-2">
+                                <div className="flex items-center justify-between mb-6">
+                                    <h3 className="text-xl font-bold">Productos Estrella</h3>
+                                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Top 5 por Ingresos</span>
+                                </div>
+                                <div className="space-y-4">
+                                    {lp.slice(0, 5).map((p, i) => (
+                                        <div key={p.productId} className="flex items-center gap-4">
+                                            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center font-bold text-xs">
+                                                {i + 1}
+                                            </div>
+                                            <div className="flex-1">
+                                                <div className="flex justify-between mb-1">
+                                                    <span className="font-bold text-sm truncate max-w-[200px]">{p.productName}</span>
+                                                    <span className="font-bold text-sm text-indigo-600">{formatCurrency(p.totalRevenue)}</span>
+                                                </div>
+                                                <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                                                    <div
+                                                        className="h-full bg-indigo-500 rounded-full"
+                                                        style={{ width: `${(p.totalRevenue / lp[0].totalRevenue) * 100}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

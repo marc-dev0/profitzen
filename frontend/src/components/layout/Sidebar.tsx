@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
@@ -118,7 +118,27 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
     // Grouping logic (simplified since backend already sends them somewhat grouped)
     const principalItems = menuModules?.filter(m => m.groupName === 'PRINCIPAL' || !m.groupName) || [];
     const salesItems = menuModules?.filter(m => m.groupName === 'VENTAS') || [];
-    const intelItems = menuModules?.filter(m => m.groupName === 'INTELIGENCIA') || [];
+    const intelItems = useMemo(() => {
+        const items = menuModules?.filter(m => m.groupName === 'INTELIGENCIA') || [];
+
+        // Ensure Reportes is present if user has analytics permissions
+        if (items.some(i => i.code === 'analytics') && !items.some(i => i.code === 'reports')) {
+            items.push({
+                id: 'reports-manual',
+                code: 'reports',
+                name: 'Reporte de Ventas',
+                route: '/reports',
+                icon: 'FileText',
+                sortOrder: 0,
+                groupName: 'INTELIGENCIA',
+                children: []
+            });
+            // Sort to make sure it follows sortOrder
+            return [...items].sort((a, b) => a.sortOrder - b.sortOrder);
+        }
+        return items;
+    }, [menuModules]);
+
     const opsItems = menuModules?.filter(m => m.groupName === 'OPERACIONES') || [];
     const configItems = menuModules?.filter(m => m.groupName === 'CONFIGURACION') || [];
 

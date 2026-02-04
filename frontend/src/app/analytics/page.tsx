@@ -381,7 +381,9 @@ export default function AnalyticsPage() {
                     </div>
                     <div className="h-[350px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={report?.dailySummaries}>
+                            <AreaChart data={report?.dailySummaries && report.dailySummaries.length === 1
+                                ? [{ ...report.dailySummaries[0], date: new Date(new Date(report.dailySummaries[0].date).getTime() - 86400000).toISOString(), totalRevenue: 0, totalProfit: 0 }, ...report.dailySummaries]
+                                : report?.dailySummaries}>
                                 <defs>
                                     <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
                                         <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1} />
@@ -397,11 +399,32 @@ export default function AnalyticsPage() {
                                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 600 }} tickFormatter={(v) => `S/${v}`} />
                                 <Tooltip
                                     contentStyle={{ borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                                    formatter={(v) => formatCurrency(v as number)}
+                                    formatter={(v, name) => [
+                                        formatCurrency(v as number),
+                                        name === 'totalRevenue' ? 'Ventas' : name === 'totalProfit' ? 'Utilidad' : name
+                                    ]}
                                     labelFormatter={formatDate}
                                 />
-                                <Area type="monotone" dataKey="totalRevenue" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorRev)" />
-                                <Area type="monotone" dataKey="totalProfit" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorProfit)" />
+                                <Area
+                                    type="monotone"
+                                    dataKey="totalRevenue"
+                                    stroke="#3b82f6"
+                                    strokeWidth={3}
+                                    fillOpacity={1}
+                                    fill="url(#colorRev)"
+                                    animationDuration={1500}
+                                    connectNulls
+                                />
+                                <Area
+                                    type="monotone"
+                                    dataKey="totalProfit"
+                                    stroke="#10b981"
+                                    strokeWidth={3}
+                                    fillOpacity={1}
+                                    fill="url(#colorProfit)"
+                                    animationDuration={1500}
+                                    connectNulls
+                                />
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
