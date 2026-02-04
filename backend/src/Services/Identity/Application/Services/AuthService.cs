@@ -413,19 +413,28 @@ public class AuthService : IAuthService
         
         var resetLink = $"{frontendUrl.TrimEnd('/')}/reset-password/{resetToken.Token}";
         
-        var subject = "Restablece tu contraseña - Profitzen";
+        var subject = "Restablecimiento de contraseña - Profitzen";
         var body = $@"
-            <div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; rounded: 12px;'>
-                <h2 style='color: #2563eb;'>Recuperación de Contraseña</h2>
-                <p>Hola {user.FirstName},</p>
-                <p>Has solicitado restablecer tu contraseña en Profitzen. Haz clic en el siguiente botón para continuar:</p>
-                <div style='text-align: center; margin: 30px 0;'>
-                    <a href='{resetLink}' style='background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold;'>Restablecer Contraseña</a>
+            <div style='font-family: -apple-system, BlinkMacSystemFont, ""Segoe UI"", Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; background-color: #ffffff;'>
+                <div style='text-align: center; margin-bottom: 30px;'>
+                    <h1 style='color: #1e293b; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.025em;'>PROFIT<span style='color: #2563eb;'>ZEN</span></h1>
                 </div>
-                <p>Este enlace expirará en 24 horas.</p>
-                <p style='color: #64748b; font-size: 0.875rem;'>Si no solicitaste este cambio, puedes ignorar este correo con seguridad.</p>
-                <hr style='border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;' />
-                <p style='color: #94a3b8; font-size: 0.75rem; text-align: center;'>Profitzen - Sistema de Gestión Inteligente</p>
+                
+                <div style='background-color: #f8fafc; padding: 32px; border-radius: 16px; border: 1px solid #e2e8f0;'>
+                    <h2 style='color: #0f172a; margin-top: 0; font-size: 20px;'>Hola {user.FirstName},</h2>
+                    <p style='color: #475569; line-height: 1.6; font-size: 16px;'>Recibimos una solicitud para restablecer la contraseña de tu cuenta en Profitzen.</p>
+                    
+                    <div style='text-align: center; margin: 32px 0;'>
+                        <a href='{resetLink}' style='background-color: #2563eb; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 16px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);'>Restablecer mi contraseña</a>
+                    </div>
+                    
+                    <p style='color: #64748b; font-size: 14px; line-height: 1.6;'>Si no solicitaste este cambio, puedes ignorar este mensaje de forma segura. Tu contraseña actual seguirá siendo la misma.</p>
+                </div>
+                
+                <div style='text-align: center; margin-top: 32px; padding-top: 32px; border-top: 1px solid #e2e8f0;'>
+                    <p style='color: #94a3b8; font-size: 12px; margin: 0;'>Este enlace expirará en 24 horas por razones de seguridad.</p>
+                    <p style='color: #94a3b8; font-size: 12px; margin: 8px 0 0;'>&copy; {DateTime.Now.Year} Profitzen. Todos los derechos reservados.</p>
+                </div>
             </div>";
 
         await _emailService.SendEmailAsync(user.Email!, subject, body);

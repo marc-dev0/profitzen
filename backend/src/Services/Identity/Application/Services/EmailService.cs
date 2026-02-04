@@ -24,7 +24,7 @@ public class EmailService : IEmailService
         var smtpUser = _configuration["EmailSettings:SmtpUser"];
         var smtpPass = _configuration["EmailSettings:SmtpPass"];
         var fromEmail = _configuration["EmailSettings:FromEmail"];
-        var fromName = _configuration["EmailSettings:FromName"] ?? "Profitzen";
+        var fromName = _configuration["EmailSettings:FromName"] ?? "Profitzen - Soporte";
 
         if (string.IsNullOrEmpty(smtpHost) || string.IsNullOrEmpty(smtpUser))
         {
