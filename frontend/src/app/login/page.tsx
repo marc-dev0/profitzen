@@ -247,15 +247,12 @@ export default function LoginPage() {
               )}
 
               <div className="flex items-center justify-end">
-                {!selectedUser && (
-                  <div className="text-sm">
-                    <Link href="/forgot-password" className="font-medium text-primary hover:text-primary/80 transition-colors">
-                      ¿Olvidaste tu contraseña?
-                    </Link>
-                  </div>
-                )}
+                <div className="text-sm">
+                  <Link href="/forgot-password" className="font-medium text-primary hover:text-primary/80 transition-colors">
+                    ¿Olvidaste tu contraseña?
+                  </Link>
+                </div>
               </div>
-
 
               <div>
                 <button
@@ -295,16 +292,14 @@ export default function LoginPage() {
               )}
             </form>
 
-            {!selectedUser && !isAddingAccount && (
-              <div className="mt-6 text-center">
-                <p className="text-sm text-muted-foreground">
-                  ¿No tienes una cuenta?{' '}
-                  <Link href="/register" className="font-bold text-primary hover:text-primary/80 transition-colors">
-                    Regístrate gratis
-                  </Link>
-                </p>
-              </div>
-            )}
+            <div className="mt-6 text-center">
+              <p className="text-sm text-muted-foreground">
+                ¿No tienes una cuenta?{' '}
+                <Link href="/register" className="font-bold text-primary hover:text-primary/80 transition-colors">
+                  Regístrate gratis
+                </Link>
+              </p>
+            </div>
           </>
         )}
       </div>
