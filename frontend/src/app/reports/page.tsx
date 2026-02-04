@@ -241,7 +241,9 @@ export default function ReportsPage() {
                             <h3 className="text-lg font-semibold mb-6">Tendencia de Ingresos</h3>
                             <div className="h-[350px] w-full">
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={salesReport?.dailySummaries || []}>
+                                    <LineChart data={salesReport?.dailySummaries && salesReport.dailySummaries.length === 1
+                                        ? [{ ...salesReport.dailySummaries[0], date: new Date(new Date(salesReport.dailySummaries[0].date).getTime() - 86400000).toISOString(), totalRevenue: 0, totalProfit: 0 }, ...salesReport.dailySummaries]
+                                        : salesReport?.dailySummaries || []}>
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                                         <XAxis
                                             dataKey="date"
@@ -264,7 +266,7 @@ export default function ReportsPage() {
                                         />
                                         <Tooltip
                                             contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #E5E7EB', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                            formatter={(val: number | undefined) => [`S/${(val || 0).toFixed(2)}`, 'Ingresos']}
+                                            formatter={(val: number | undefined) => [formatCurrency(val || 0), 'Ventas']}
                                             labelFormatter={(label) => {
                                                 const d = new Date(label);
                                                 // Manual dd/MM/yyyy format
@@ -278,6 +280,7 @@ export default function ReportsPage() {
                                             strokeWidth={3}
                                             dot={{ r: 4, fill: '#3B82F6', strokeWidth: 2, stroke: '#fff' }}
                                             activeDot={{ r: 6, fill: '#3B82F6' }}
+                                            connectNulls
                                         />
                                     </LineChart>
                                 </ResponsiveContainer>

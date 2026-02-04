@@ -119,10 +119,13 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
     const principalItems = menuModules?.filter(m => m.groupName === 'PRINCIPAL' || !m.groupName) || [];
     const salesItems = menuModules?.filter(m => m.groupName === 'VENTAS') || [];
     const intelItems = useMemo(() => {
-        const items = menuModules?.filter(m => m.groupName === 'INTELIGENCIA') || [];
+        let items = menuModules?.filter(m => m.groupName === 'INTELIGENCIA') || [];
+
+        // Hide AI items for now
+        items = items.filter(i => i.code !== 'analytics_ia' && i.code !== 'analytics_ia_history');
 
         // Ensure Reportes is present if user has analytics permissions
-        if (items.some(i => i.code === 'analytics') && !items.some(i => i.code === 'reports')) {
+        if (!items.some(i => i.code === 'reports')) {
             items.push({
                 id: 'reports-manual',
                 code: 'reports',
@@ -133,10 +136,10 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
                 groupName: 'INTELIGENCIA',
                 children: []
             });
-            // Sort to make sure it follows sortOrder
-            return [...items].sort((a, b) => a.sortOrder - b.sortOrder);
         }
-        return items;
+
+        // Sort to make sure it follows sortOrder
+        return [...items].sort((a, b) => a.sortOrder - b.sortOrder);
     }, [menuModules]);
 
     const opsItems = menuModules?.filter(m => m.groupName === 'OPERACIONES') || [];
