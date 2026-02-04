@@ -38,6 +38,12 @@ services:
       - JwtSettings__Issuer=Profitzen.Identity
       - JwtSettings__Audience=Profitzen.Api
       - Services__ApiKey=${SERVICE_KEY}
+      - EmailSettings__SmtpHost=${SMTP_HOST:-smtp.gmail.com}
+      - EmailSettings__SmtpPort=${SMTP_PORT:-587}
+      - EmailSettings__SmtpUser=${SMTP_USER}
+      - EmailSettings__SmtpPass=${SMTP_PASS}
+      - EmailSettings__FromEmail=${SMTP_FROM:-no-reply@profitzen.com}
+      - AppSettings__FrontendUrl=http://${DOMAIN_NAME}
       - Serilog__WriteTo__2__Args__serverUrl=http://seq:5341
     depends_on:
       - postgres

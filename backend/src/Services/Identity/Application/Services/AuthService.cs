@@ -31,6 +31,7 @@ public class AuthService : IAuthService
     private readonly IDemoDataSeeder _demoDataSeeder;
     private readonly ServiceHttpClient _serviceHttpClient;
     private readonly IWebHostEnvironment _environment;
+    private readonly IEmailService _emailService;
 
     public AuthService(
         UserManager<User> userManager,
@@ -39,7 +40,8 @@ public class AuthService : IAuthService
         ILogger<AuthService> logger,
         IDemoDataSeeder demoDataSeeder,
         ServiceHttpClient serviceHttpClient,
-        IWebHostEnvironment environment)
+        IWebHostEnvironment environment,
+        IEmailService emailService)
     {
         _userManager = userManager;
         _dbContext = dbContext;
@@ -48,6 +50,7 @@ public class AuthService : IAuthService
         _demoDataSeeder = demoDataSeeder;
         _serviceHttpClient = serviceHttpClient;
         _environment = environment;
+        _emailService = emailService;
     }
 
     public async Task<LoginResponse> RegisterAsync(RegisterRequest request)
@@ -400,9 +403,26 @@ public class AuthService : IAuthService
         await _dbContext.PasswordResetTokens.AddAsync(resetToken);
         await _dbContext.SaveChangesAsync();
 
-        // TODO: Send email with reset link
-        // For now, just log it (in production, you'd send an email)
-        var resetLink = $"{_configuration["AppSettings:FrontendUrl"]}/reset-password/{resetToken.Token}";
+        // Send email with reset link
+        var frontendUrl = _configuration["AppSettings:FrontendUrl"] ?? "http://localhost:3000";
+        var resetLink = $"{frontendUrl}/reset-password/{resetToken.Token}";
+        
+        var subject = "Restablece tu contraseña - Profitzen";
+        var body = $@"
+            <div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; rounded: 12px;'>
+                <h2 style='color: #2563eb;'>Recuperación de Contraseña</h2>
+                <p>Hola {user.FirstName},</p>
+                <p>Has solicitado restablecer tu contraseña en Profitzen. Haz clic en el siguiente botón para continuar:</p>
+                <div style='text-align: center; margin: 30px 0;'>
+                    <a href='{resetLink}' style='background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold;'>Restablecer Contraseña</a>
+                </div>
+                <p>Este enlace expirará en 24 horas.</p>
+                <p style='color: #64748b; font-size: 0.875rem;'>Si no solicitaste este cambio, puedes ignorar este correo con seguridad.</p>
+                <hr style='border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;' />
+                <p style='color: #94a3b8; font-size: 0.75rem; text-align: center;'>Profitzen - Sistema de Gestión Inteligente</p>
+            </div>";
+
+        await _emailService.SendEmailAsync(user.Email!, subject, body);
         _logger.LogInformation("Password reset link for {Email}: {ResetLink}", user.Email, resetLink);
 
         return new ForgotPasswordResponse("Si el correo existe, recibirás un enlace para restablecer tu contraseña.");
