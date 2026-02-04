@@ -404,8 +404,14 @@ public class AuthService : IAuthService
         await _dbContext.SaveChangesAsync();
 
         // Send email with reset link
-        var frontendUrl = _configuration["AppSettings:FrontendUrl"] ?? "http://localhost:3000";
-        var resetLink = $"{frontendUrl}/reset-password/{resetToken.Token}";
+        var frontendUrl = _configuration["AppSettings:FrontendUrl"];
+        if (string.IsNullOrEmpty(frontendUrl) || frontendUrl == "http://localhost:3000")
+        {
+            // Fallback for production if variable is missing
+            frontendUrl = "http://76.13.106.53";
+        }
+        
+        var resetLink = $"{frontendUrl.TrimEnd('/')}/reset-password/{resetToken.Token}";
         
         var subject = "Restablece tu contraseña - Profitzen";
         var body = $@"
