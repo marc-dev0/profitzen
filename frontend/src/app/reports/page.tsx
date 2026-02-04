@@ -6,8 +6,8 @@ import { useAuthStore } from '@/store/authStore';
 import { useSalesReport, useProductPerformance, useRecalculateAnalytics } from '@/hooks/useAnalytics'; // Import hook
 import { FormattedDateInput } from '@/components/ui/formatted-date-input';
 import AppLayout from '@/components/layout/AppLayout';
-import { SortableTable } from '@/components/SortableTable';
-import { Download, Filter, Calendar as CalendarIcon, TrendingUp, DollarSign, Package, Users, RefreshCw } from 'lucide-react'; // Import Icon
+import { DataTable, Column } from '@/components/DataTable';
+import { Download, Filter, Calendar as CalendarIcon, TrendingUp, DollarSign, Package, Users, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -292,48 +292,53 @@ export default function ReportsPage() {
                             <div className="p-6 border-b">
                                 <h3 className="text-lg font-semibold">Detalle Diario</h3>
                             </div>
-                            <SortableTable
+                            <DataTable
                                 data={salesReport?.dailySummaries || []}
+                                keyExtractor={(row) => row.date}
                                 columns={[
                                     {
                                         key: 'date',
-                                        label: 'Fecha',
+                                        header: 'Fecha',
+                                        sortable: true,
                                         render: (row) => {
                                             const d = new Date(row.date);
-                                            // Manual dd/MM/yyyy format
                                             const day = d.getUTCDate().toString().padStart(2, '0');
                                             const month = (d.getUTCMonth() + 1).toString().padStart(2, '0');
                                             const year = d.getUTCFullYear();
-                                            // Include weekday name if desired, or just date? User asked for dd/MM/yyyy.
-                                            // Let's stick to simple dd/MM/yyyy as requested "standard".
                                             return `${day}/${month}/${year}`;
                                         }
                                     },
                                     {
                                         key: 'totalSales',
-                                        label: 'Transacciones',
-                                        render: (row) => row.totalSales,
-                                        className: 'text-center'
+                                        header: 'Transacciones',
+                                        sortable: true,
+                                        render: (row) => (
+                                            <div className="text-center">{row.totalSales}</div>
+                                        )
                                     },
                                     {
                                         key: 'averageTicket',
-                                        label: 'Ticket Prom.',
-                                        render: (row) => formatCurrency(row.averageTicket),
-                                        className: 'text-right'
+                                        header: 'Ticket Prom.',
+                                        sortable: true,
+                                        render: (row) => (
+                                            <div className="text-right">{formatCurrency(row.averageTicket)}</div>
+                                        )
                                     },
                                     {
                                         key: 'totalRevenue',
-                                        label: 'Ingresos',
-                                        render: (row) => formatCurrency(row.totalRevenue),
-                                        className: 'font-medium text-right'
+                                        header: 'Ingresos',
+                                        sortable: true,
+                                        render: (row) => (
+                                            <div className="font-medium text-right text-primary">{formatCurrency(row.totalRevenue)}</div>
+                                        )
                                     },
                                     {
                                         key: 'totalProfit',
-                                        label: 'Utilidad',
+                                        header: 'Utilidad',
+                                        sortable: true,
                                         render: (row) => (
-                                            <span className="text-green-600 font-medium">{formatCurrency(row.totalProfit)}</span>
-                                        ),
-                                        className: 'text-right'
+                                            <div className="text-right font-bold text-green-600">{formatCurrency(row.totalProfit)}</div>
+                                        )
                                     }
                                 ]}
                             />
@@ -380,56 +385,62 @@ export default function ReportsPage() {
                             <div className="p-6 border-b">
                                 <h3 className="text-lg font-semibold">Rendimiento Detallado por Producto</h3>
                             </div>
-                            <SortableTable
+                            <DataTable
                                 data={productPerf || []}
+                                keyExtractor={(row) => row.productId}
+                                searchable={true}
+                                searchPlaceholder="Buscar producto por nombre o código..."
+                                searchKeys={['productName', 'productCode']}
                                 columns={[
                                     {
                                         key: 'productCode',
-                                        label: 'Código',
-                                        render: (row) => row.productCode,
-                                        className: 'font-mono text-sm text-muted-foreground'
+                                        header: 'Código',
+                                        sortable: true,
+                                        render: (row) => <span className="font-mono text-sm text-muted-foreground">{row.productCode}</span>
                                     },
                                     {
                                         key: 'productName',
-                                        label: 'Producto',
-                                        render: (row) => row.productName,
-                                        className: 'font-medium'
+                                        header: 'Producto',
+                                        sortable: true,
+                                        render: (row) => <span className="font-medium">{row.productName}</span>
                                     },
                                     {
                                         key: 'totalSold',
-                                        label: 'Cant. Vendida',
-                                        render: (row) => row.totalSold,
-                                        className: 'text-center'
+                                        header: 'Cant. Vendida',
+                                        sortable: true,
+                                        render: (row) => <div className="text-center">{row.totalSold}</div>
                                     },
                                     {
                                         key: 'totalCost',
-                                        label: 'Costo Total',
-                                        render: (row) => formatCurrency(row.totalCost),
-                                        className: 'text-right text-muted-foreground'
+                                        header: 'Costo Total',
+                                        sortable: true,
+                                        render: (row) => <div className="text-right text-muted-foreground">{formatCurrency(row.totalCost)}</div>
                                     },
                                     {
                                         key: 'totalRevenue',
-                                        label: 'Ventas Totales',
-                                        render: (row) => formatCurrency(row.totalRevenue),
-                                        className: 'text-right font-medium'
+                                        header: 'Ventas Totales',
+                                        sortable: true,
+                                        render: (row) => <div className="text-right font-medium text-primary">{formatCurrency(row.totalRevenue)}</div>
                                     },
                                     {
                                         key: 'totalProfit',
-                                        label: 'Utilidad',
+                                        header: 'Utilidad',
+                                        sortable: true,
                                         render: (row) => (
-                                            <span className="text-green-600 font-medium">{formatCurrency(row.totalProfit)}</span>
-                                        ),
-                                        className: 'text-right'
+                                            <div className="text-right font-bold text-green-600">{formatCurrency(row.totalProfit)}</div>
+                                        )
                                     },
                                     {
                                         key: 'profitMargin',
-                                        label: 'Margen',
+                                        header: 'Margen',
+                                        sortable: true,
                                         render: (row) => (
-                                            <span className={`px-2 py-1 rounded-full text-xs font-bold ${row.profitMargin > 30 ? 'bg-green-100 text-green-700' : row.profitMargin > 15 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
-                                                {row.profitMargin.toFixed(1)}%
-                                            </span>
-                                        ),
-                                        className: 'text-center'
+                                            <div className="text-center">
+                                                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${row.profitMargin > 30 ? 'bg-green-100 text-green-700' : row.profitMargin > 15 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+                                                    {row.profitMargin.toFixed(1)}%
+                                                </span>
+                                            </div>
+                                        )
                                     }
                                 ]}
                             />

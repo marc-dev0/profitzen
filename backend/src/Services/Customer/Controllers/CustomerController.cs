@@ -233,6 +233,14 @@ public class CustomerController : ControllerBase
         var credits = await _customerService.GetOverdueCreditsAsync(tenantId);
         return Ok(credits);
     }
+
+    [HttpGet("credits/pending")]
+    public async Task<IActionResult> GetPendingCredits()
+    {
+        var tenantId = GetCurrentTenantId();
+        var credits = await _customerService.GetPendingCreditsAsync(tenantId);
+        return Ok(credits);
+    }
     [HttpGet("internal/customers/{id:guid}")]
     [Authorize(Policy = "AllowServiceAuth")]
     [ApiExplorerSettings(IgnoreApi = true)]

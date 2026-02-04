@@ -26,7 +26,8 @@ import {
     Shield,
     Settings,
     TrendingUp,
-    Briefcase
+    Briefcase,
+    Banknote
 } from 'lucide-react';
 
 // Icon Map for dynamic icons from DB
@@ -48,7 +49,8 @@ const ICON_MAP: Record<string, any> = {
     'Shield': Shield,
     'Settings': Settings,
     'TrendingUp': TrendingUp,
-    'Briefcase': Briefcase
+    'Briefcase': Briefcase,
+    'Banknote': Banknote
 };
 
 export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -117,7 +119,24 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
 
     // Grouping logic (simplified since backend already sends them somewhat grouped)
     const principalItems = menuModules?.filter(m => m.groupName === 'PRINCIPAL' || !m.groupName) || [];
-    const salesItems = menuModules?.filter(m => m.groupName === 'VENTAS') || [];
+    const salesItems = useMemo(() => {
+        let items = menuModules?.filter(m => m.groupName === 'VENTAS') || [];
+
+        if (!items.some(i => i.code === 'collections')) {
+            items.push({
+                id: 'collections-manual',
+                code: 'collections',
+                name: 'Cuentas por Cobrar',
+                route: '/collections',
+                icon: 'Banknote',
+                sortOrder: 10,
+                groupName: 'VENTAS',
+                children: []
+            });
+        }
+        return [...items].sort((a, b) => a.sortOrder - b.sortOrder);
+    }, [menuModules]);
+
     const intelItems = useMemo(() => {
         let items = menuModules?.filter(m => m.groupName === 'INTELIGENCIA') || [];
 

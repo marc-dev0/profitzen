@@ -479,27 +479,43 @@ public class CustomerService : ICustomerService
             .Include(c => c.Payments)
             .Where(c => c.Customer.TenantId == tenantId && !c.IsPaid && c.DueDate.HasValue && c.DueDate.Value < DateTime.UtcNow)
             .OrderBy(c => c.DueDate)
-            .Select(c => new CreditDto(
-                c.Id,
-                c.CustomerId,
-                c.Customer.GetFullName(),
-                c.Amount,
-                c.RemainingAmount,
-                c.CreditDate,
-                c.DueDate,
-                c.IsPaid,
-                c.IsOverdue(),
-                c.PaidDate,
-                c.Notes,
-                c.Payments.Select(p => new CreditPaymentDto(
-                    p.Id,
-                    p.Amount,
-                    p.PaymentDate,
-                    p.Notes
-                )).ToList(),
-                c.CreatedAt
-            ))
+            .Select(c => MapToCreditDto(c))
             .ToListAsync();
+    }
+
+    public async Task<IEnumerable<CreditDto>> GetPendingCreditsAsync(string tenantId)
+    {
+        return await _context.Credits
+            .Include(c => c.Customer)
+            .Include(c => c.Payments)
+            .Where(c => c.Customer.TenantId == tenantId && !c.IsPaid)
+            .OrderBy(c => c.DueDate)
+            .Select(c => MapToCreditDto(c))
+            .ToListAsync();
+    }
+
+    private static CreditDto MapToCreditDto(Credit c)
+    {
+        return new CreditDto(
+            c.Id,
+            c.CustomerId,
+            c.Customer.GetFullName(),
+            c.Amount,
+            c.RemainingAmount,
+            c.CreditDate,
+            c.DueDate,
+            c.IsPaid,
+            c.IsOverdue(),
+            c.PaidDate,
+            c.Notes,
+            c.Payments.Select(p => new CreditPaymentDto(
+                p.Id,
+                p.Amount,
+                p.PaymentDate,
+                p.Notes
+            )).ToList(),
+            c.CreatedAt
+        );
     }
 
     public async Task<IEnumerable<CustomerDto>> GetTopCustomersAsync(string tenantId, int count = 10)

@@ -82,3 +82,8 @@ export async function addCreditPayment(creditId: string, amount: number, notes?:
     });
     return response.data;
 }
+
+export async function getPendingCredits(): Promise<Credit[]> {
+    const response = await apiClient.get<Credit[]>('/api/customer/credits/pending');
+    return response.data;
+}
