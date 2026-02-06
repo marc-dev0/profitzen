@@ -53,6 +53,9 @@ import AppLayout from '@/components/layout/AppLayout';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
+import { useCashShift } from '@/hooks/useCashShift';
+import { CashControl } from '@/components/CashControl/CashControl';
+import { Lock } from 'lucide-react';
 
 import type { ProductSaleUOM } from '@/types/inventory';
 
@@ -100,6 +103,10 @@ export default function POSPage() {
   const { customers, isLoading: isLoadingCustomers, refresh: refreshCustomers } = useCustomers(); // Use customers hook
   const { data: priceLists, isLoading: isLoadingPriceLists } = usePriceLists();
   const { data: companySettings } = useCompanySettings();
+
+  // Cash Shift Status
+  const { data: openShift, isLoading: isLoadingShift } = useCashShift(user?.currentStoreId);
+  const isShiftOpen = !!openShift;
 
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -734,6 +741,7 @@ export default function POSPage() {
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['store-inventory'] });
       queryClient.invalidateQueries({ queryKey: ['customers'] }); // Refresh customer data
+      queryClient.invalidateQueries({ queryKey: ['cash-shift'] });
 
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (error: any) {
@@ -804,14 +812,46 @@ export default function POSPage() {
               <kbd className="px-2 py-1 bg-background border border-border rounded shadow-sm font-mono text-primary">ESC</kbd>
               <span className="text-muted-foreground">Limpiar</span>
             </div>
-            <div className="text-primary font-semibold">
-              Modo: <span className="px-2 py-1 bg-primary/10 rounded border border-primary/20">{focusMode === 'search' ? '🔍 Búsqueda' : focusMode === 'products' ? '📦 Productos' : focusMode === 'cart' ? '🛒 Carrito' : '💳 Pago'}</span>
+            <div className="flex items-center gap-4">
+              <CashControl />
+              <div className="text-primary font-semibold hidden md:block">
+                Modo: <span className="px-2 py-1 bg-primary/10 rounded border border-primary/20">{focusMode === 'search' ? '🔍 Búsqueda' : focusMode === 'products' ? '📦 Productos' : focusMode === 'cart' ? '🛒 Carrito' : '💳 Pago'}</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <main className="max-w-[1800px] mx-auto py-6 px-6">
+      <main className="max-w-[1800px] mx-auto py-6 px-6 relative min-h-[calc(100vh-140px)]">
+
+        {/* Cash Shift Blocking Overlay */}
+        {!isShiftOpen && (
+          <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center rounded-xl border border-dashed border-border transition-all duration-500">
+            {isLoadingShift ? (
+              <div className="text-center p-8 animate-in fade-in zoom-in duration-300">
+                <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-primary mx-auto mb-6"></div>
+                <h2 className="text-2xl font-bold mb-2">Verificando estado de caja...</h2>
+                <p className="text-muted-foreground">Por favor espere un momento.</p>
+              </div>
+            ) : (
+              <div className="text-center p-10 bg-card shadow-2xl rounded-3xl border-2 border-primary/20 max-w-lg animate-in zoom-in duration-300">
+                <div className="bg-red-100 dark:bg-red-900/30 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
+                  <Lock className="w-12 h-12 text-red-600 dark:text-red-400" />
+                </div>
+                <h2 className="text-3xl font-black mb-4 text-foreground">¡Caja Cerrada!</h2>
+                <p className="text-lg text-muted-foreground mb-8 leading-relaxed">
+                  Para poder realizar ventas, es necesario <strong>Abrir Caja</strong>.
+                  <br />
+                  Esto nos permite llevar un control seguro del dinero.
+                </p>
+                <div className="flex justify-center scale-125 transform transition-transform hover:scale-130">
+                  <CashControl className="w-full justify-center shadow-xl" />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {successMessage && (
           <div className="bg-green-500/15 border-l-4 border-green-500 text-green-700 dark:text-green-400 px-6 py-4 rounded-lg mb-6 shadow-sm flex items-center justify-between">
             <div className="flex items-center">
@@ -834,7 +874,7 @@ export default function POSPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className={`grid grid-cols-1 lg:grid-cols-3 gap-6 transition-all duration-300 ${!isShiftOpen && !isLoadingShift ? 'opacity-40 pointer-events-none filter blur-[2px]' : ''}`}>
           {/* Búsqueda y productos - 2 columnas */}
           <div className="lg:col-span-2 space-y-6">
             {/* Búsqueda */}

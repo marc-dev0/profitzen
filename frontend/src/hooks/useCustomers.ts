@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import apiClient from '@/lib/axios';
-import { Customer, CreateCustomerRequest, UpdateCustomerRequest, UpdateCreditLimitRequest, Credit } from '@/types/customer';
+import { Customer, CreateCustomerRequest, UpdateCustomerRequest, UpdateCreditLimitRequest, Credit, CreditPaymentDetail } from '@/types/customer';
 
 // URL Keys
 const CUSTOMERS_URL = '/api/customer/customers';
@@ -75,9 +75,10 @@ export async function getCustomerCredits(customerId: string): Promise<Credit[]> 
     return response.data;
 }
 
-export async function addCreditPayment(creditId: string, amount: number, notes?: string): Promise<Credit> {
+export async function addCreditPayment(creditId: string, amount: number, storeId: string, notes?: string): Promise<Credit> {
     const response = await apiClient.post<Credit>(`/api/customer/credits/${creditId}/payments`, {
         amount,
+        storeId,
         notes
     });
     return response.data;
@@ -86,4 +87,29 @@ export async function addCreditPayment(creditId: string, amount: number, notes?:
 export async function getPendingCredits(): Promise<Credit[]> {
     const response = await apiClient.get<Credit[]>('/api/customer/credits/pending');
     return response.data;
+}
+
+export function useCreditPayments(storeId?: string, fromDate?: Date, toDate?: Date) {
+    const query = useQuery<CreditPaymentDetail[]>({
+        queryKey: ['credit-payments', storeId, fromDate?.toISOString(), toDate?.toISOString()],
+        queryFn: async () => {
+            let url = '/api/customer/credits/payments';
+            const params = new URLSearchParams();
+            if (storeId) params.append('storeId', storeId);
+            if (fromDate) params.append('fromDate', fromDate.toISOString());
+            if (toDate) params.append('toDate', toDate.toISOString());
+
+            if (params.toString()) url += `?${params.toString()}`;
+
+            const response = await apiClient.get(url);
+            return response.data;
+        }
+    });
+
+    return {
+        payments: query.data || [],
+        isLoading: query.isLoading,
+        isError: query.isError,
+        refresh: query.refetch
+    };
 }

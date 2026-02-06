@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, ReactNode } from 'react';
+import { useState, useEffect, ReactNode, Fragment } from 'react';
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown } from 'lucide-react';
 
 export interface Column<T> {
@@ -30,6 +30,8 @@ interface DataTableProps<T> {
     onSelectionChange?: (selectedItems: T[]) => void;
     selectedItems?: T[];
     renderDetail?: (item: T) => ReactNode;
+    searchTerm?: string;
+    onSearchChange?: (term: string) => void;
 }
 
 export function DataTable<T>({
@@ -48,16 +50,20 @@ export function DataTable<T>({
     initialSearchTerm = '',
     onSelectionChange,
     selectedItems = [],
-    renderDetail
+    renderDetail,
+    searchTerm: externalSearchTerm,
+    onSearchChange
 }: DataTableProps<T>) {
     const [currentPage, setCurrentPage] = useState(1);
     const [rowsPerPage, setRowsPerPage] = useState(defaultRowsPerPage);
-    const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
+    const [internalSearchTerm, setInternalSearchTerm] = useState(initialSearchTerm);
     const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
+    const searchTerm = externalSearchTerm !== undefined ? externalSearchTerm : internalSearchTerm;
+
     // Filter data based on search
-    const filteredData = searchable && searchTerm
+    const filteredData = (searchable || externalSearchTerm !== undefined) && searchTerm
         ? data.filter((item) => {
             const searchLower = searchTerm.toLowerCase();
             return searchKeys.some((key) => {
@@ -254,7 +260,10 @@ export function DataTable<T>({
                             type="text"
                             placeholder={searchPlaceholder}
                             value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
+                            onChange={(e) => {
+                                setInternalSearchTerm(e.target.value);
+                                onSearchChange?.(e.target.value);
+                            }}
                             className="w-full pl-10 pr-4 py-2 border border-input bg-background rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-foreground placeholder:text-muted-foreground"
                         />
                     </div>
@@ -314,9 +323,8 @@ export function DataTable<T>({
                                     const isExpanded = expandedRows.has(itemId);
 
                                     return (
-                                        <>
+                                        <Fragment key={itemId}>
                                             <tr
-                                                key={itemId}
                                                 onClick={() => onRowClick?.(item)}
                                                 className={`hover:bg-muted/50 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
                                             >
@@ -368,7 +376,7 @@ export function DataTable<T>({
                                                     </td>
                                                 </tr>
                                             )}
-                                        </>
+                                        </Fragment>
                                     );
                                 })}
 

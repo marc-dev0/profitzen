@@ -321,7 +321,7 @@ public class CustomerService : ICustomerService
         if (!customer.HasAvailableCredit(request.Amount))
             throw new InvalidOperationException("Customer does not have enough available credit");
 
-        var credit = new Credit(customer.TenantId, request.CustomerId, request.Amount, request.DueDate, request.Notes);
+        var credit = new Credit(customer.TenantId, request.CustomerId, request.StoreId, request.Amount, request.DueDate, request.Notes);
         _context.Credits.Add(credit);
 
         customer.AddDebt(request.Amount);
@@ -358,7 +358,7 @@ public class CustomerService : ICustomerService
             var isPaid = newRemainingAmount == 0;
             
 
-            var payment = new CreditPayment(credit.TenantId, creditId, request.Amount, request.Notes);
+            var payment = new CreditPayment(credit.TenantId, creditId, request.StoreId, request.Amount, request.Notes);
             _context.CreditPayments.Add(payment);
             await _context.SaveChangesAsync();
             
@@ -436,7 +436,7 @@ public class CustomerService : ICustomerService
             if (amountToReverse > 0)
             {
 
-                var payment = new CreditPayment(credit.TenantId, credit.Id, amountToReverse, $"Devolución / Refund: {reference}");
+                var payment = new CreditPayment(credit.TenantId, credit.Id, credit.StoreId, amountToReverse, $"Devolución / Refund: {reference}");
                 _context.CreditPayments.Add(payment);
                 await _context.SaveChangesAsync();
                 
@@ -492,6 +492,38 @@ public class CustomerService : ICustomerService
             .OrderBy(c => c.DueDate)
             .Select(c => MapToCreditDto(c))
             .ToListAsync();
+    }
+
+    public async Task<IEnumerable<CreditPaymentDetailDto>> GetCreditPaymentsAsync(string tenantId, Guid? storeId = null, DateTime? fromDate = null, DateTime? toDate = null)
+    {
+        var query = _context.CreditPayments
+            .Include(p => p.Credit)
+                .ThenInclude(c => c.Customer)
+            .Where(p => p.TenantId == tenantId);
+
+        if (storeId.HasValue)
+            query = query.Where(p => p.StoreId == storeId.Value);
+
+        if (fromDate.HasValue)
+            query = query.Where(p => p.PaymentDate >= fromDate.Value);
+
+        if (toDate.HasValue)
+            query = query.Where(p => p.PaymentDate <= toDate.Value);
+
+        var payments = await query
+            .OrderByDescending(p => p.PaymentDate)
+            .ToListAsync();
+
+        return payments.Select(p => new CreditPaymentDetailDto(
+            p.Id,
+            p.CreditId,
+            p.Credit.CustomerId,
+            p.Credit.Customer.GetFullName(),
+            p.StoreId,
+            p.Amount,
+            p.PaymentDate,
+            p.Notes
+        ));
     }
 
     private static CreditDto MapToCreditDto(Credit c)

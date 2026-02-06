@@ -38,6 +38,19 @@ const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
         return
       }
 
+      if (decimals > 0 && val.includes('.')) {
+        const parts = val.split('.');
+        if (parts[1] && parts[1].length > decimals) {
+          return;
+        }
+      }
+      if (decimals > 0 && val.includes(',')) {
+        const parts = val.split(',');
+        if (parts[1] && parts[1].length > decimals) {
+          return;
+        }
+      }
+
       setDisplayValue(val)
 
       if (val === '') {
@@ -45,11 +58,10 @@ const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
         return
       }
 
-      if (val === '-' || val === '.' || val === ',') {
+      const normalizedVal = val.replace(',', '.')
+      if (normalizedVal === '-' || normalizedVal === '.' || normalizedVal.endsWith('.') || normalizedVal.endsWith(',')) {
         return
       }
-
-      const normalizedVal = val.replace(',', '.')
 
       const num = decimals > 0 ? parseFloat(normalizedVal) : parseInt(normalizedVal)
       if (!isNaN(num)) {

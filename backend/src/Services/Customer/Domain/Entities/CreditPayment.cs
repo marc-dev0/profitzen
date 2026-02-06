@@ -6,6 +6,7 @@ public class CreditPayment : BaseEntity
 {
     public string TenantId { get; private set; } = string.Empty;
     public Guid CreditId { get; private set; }
+    public Guid StoreId { get; private set; } // Added StoreId
     public decimal Amount { get; private set; }
     public DateTime PaymentDate { get; private set; }
     public string? Notes { get; private set; }
@@ -14,10 +15,11 @@ public class CreditPayment : BaseEntity
 
     private CreditPayment() { }
 
-    public CreditPayment(string tenantId, Guid creditId, decimal amount, string? notes = null)
+    public CreditPayment(string tenantId, Guid creditId, Guid storeId, decimal amount, string? notes = null)
     {
         TenantId = tenantId;
         CreditId = creditId;
+        StoreId = storeId;
         Amount = amount;
         PaymentDate = DateTime.UtcNow;
         Notes = notes;

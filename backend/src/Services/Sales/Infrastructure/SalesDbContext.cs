@@ -13,6 +13,9 @@ public class SalesDbContext : DbContext
     public DbSet<SaleItem> SaleItems { get; set; }
     public DbSet<Payment> Payments { get; set; }
     public DbSet<Customer> Customers { get; set; }
+    public DbSet<Expense> Expenses { get; set; }
+    public DbSet<CashShift> CashShifts { get; set; }
+    public DbSet<CashMovement> CashMovements { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -92,6 +95,56 @@ public class SalesDbContext : DbContext
             entity.HasIndex(e => new { e.DocumentNumber, e.StoreId }).IsUnique();
             entity.HasIndex(e => e.StoreId);
             entity.HasIndex(e => e.Name);
+        });
+
+    // Expense Configuration
+        modelBuilder.Entity<Expense>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Description).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Category).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.Amount).HasPrecision(18, 2);
+            entity.Property(e => e.Reference).HasMaxLength(100);
+            entity.Property(e => e.Notes).HasMaxLength(500);
+
+            entity.HasIndex(e => e.StoreId);
+            entity.HasIndex(e => e.Date);
+            entity.HasIndex(e => e.Category);
+        });
+
+        // CashShift Configuration
+        modelBuilder.Entity<CashShift>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.StartAmount).HasPrecision(18, 2);
+            entity.Property(e => e.TotalSalesCash).HasPrecision(18, 2);
+            entity.Property(e => e.TotalSalesCard).HasPrecision(18, 2);
+            entity.Property(e => e.TotalSalesTransfer).HasPrecision(18, 2);
+            entity.Property(e => e.TotalSalesWallet).HasPrecision(18, 2);
+            entity.Property(e => e.TotalCreditCollections).HasPrecision(18, 2);
+            entity.Property(e => e.TotalCashIn).HasPrecision(18, 2);
+            entity.Property(e => e.TotalCashOut).HasPrecision(18, 2);
+            entity.Property(e => e.TotalExpenses).HasPrecision(18, 2);
+            entity.Property(e => e.ExpectedCashEndAmount).HasPrecision(18, 2);
+            entity.Property(e => e.ActualCashEndAmount).HasPrecision(18, 2);
+            entity.Property(e => e.Difference).HasPrecision(18, 2);
+
+            entity.HasIndex(e => new { e.StoreId, e.Status }); // Quick lookup for open shift
+            entity.HasIndex(e => e.StartTime);
+            
+            entity.HasMany(e => e.Movements)
+                  .WithOne(m => m.CashShift)
+                  .HasForeignKey(m => m.CashShiftId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // CashMovement Configuration
+        modelBuilder.Entity<CashMovement>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Amount).HasPrecision(18, 2);
+            entity.Property(e => e.Description).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Type).HasMaxLength(10).IsRequired(); // IN, OUT
         });
 
         base.OnModelCreating(modelBuilder);

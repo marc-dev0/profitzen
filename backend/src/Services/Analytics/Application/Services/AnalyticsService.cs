@@ -28,6 +28,9 @@ public class AnalyticsService : IAnalyticsService
 
     public async Task<DashboardDto> GetDashboardAsync(string tenantId, Guid storeId)
     {
+        // Force refresh daily summaries to include recent expenses/sales
+        await GenerateDailySummariesAsync(tenantId, storeId, skipAi: true);
+
         var connection = _context.Database.GetDbConnection();
         var wasOpen = connection.State == System.Data.ConnectionState.Open;
         if (!wasOpen)
@@ -37,13 +40,13 @@ public class AnalyticsService : IAnalyticsService
         {
             var command = connection.CreateCommand();
             
-            // Define time ranges (UTC)
             // Define time ranges (UTC adjusted for Peru Time -5)
             var peruOffset = -5;
             var nowPeru = DateTime.UtcNow.AddHours(peruOffset);
             var todayPeru = nowPeru.Date;
 
             // Map boundaries back to UTC for database comparison
+            // 00:00 in Peru starts at 05:00 UTC.
             var today = todayPeru.AddHours(-peruOffset);
             var tomorrow = today.AddDays(1);
             var yesterday = today.AddDays(-1);
@@ -53,21 +56,19 @@ public class AnalyticsService : IAnalyticsService
             
             var monthStartPeru = new DateTime(todayPeru.Year, todayPeru.Month, 1);
             var monthStart = monthStartPeru.AddHours(-peruOffset);
-            var lastMonthStartPeru = monthStartPeru.AddMonths(-1);
-            var lastMonthStart = lastMonthStartPeru.AddHours(-peruOffset);
-            // var lastMonthEnd = monthStart; // Start of this month is end of last month
-
+            var lastMonthStart = monthStart.AddMonths(-1);
+            
             var startOf30Days = today.AddDays(-29);
 
             command.CommandText = @"
                 SELECT 
                     -- Today
-                    COALESCE(SUM(CASE WHEN ""SaleDate"" >= @Today AND ""SaleDate"" < @Tomorrow THEN ""Total"" ELSE 0 END), 0),
-                    COALESCE(COUNT(CASE WHEN ""SaleDate"" >= @Today AND ""SaleDate"" < @Tomorrow THEN 1 END), 0),
+                    COALESCE(SUM(CASE WHEN DATE(""SaleDate"" - INTERVAL '5 hours') = DATE(@Today - INTERVAL '5 hours') THEN ""Total"" ELSE 0 END), 0),
+                    COALESCE(COUNT(CASE WHEN DATE(""SaleDate"" - INTERVAL '5 hours') = DATE(@Today - INTERVAL '5 hours') THEN 1 END), 0),
                     
                     -- Yesterday
-                    COALESCE(SUM(CASE WHEN ""SaleDate"" >= @Yesterday AND ""SaleDate"" < @Today THEN ""Total"" ELSE 0 END), 0),
-                    COALESCE(COUNT(CASE WHEN ""SaleDate"" >= @Yesterday AND ""SaleDate"" < @Today THEN 1 END), 0),
+                    COALESCE(SUM(CASE WHEN DATE(""SaleDate"" - INTERVAL '5 hours') = DATE(@Yesterday - INTERVAL '5 hours') THEN ""Total"" ELSE 0 END), 0),
+                    COALESCE(COUNT(CASE WHEN DATE(""SaleDate"" - INTERVAL '5 hours') = DATE(@Yesterday - INTERVAL '5 hours') THEN 1 END), 0),
 
                     -- Week
                     COALESCE(SUM(CASE WHEN ""SaleDate"" >= @WeekStart AND ""SaleDate"" < @Tomorrow THEN ""Total"" ELSE 0 END), 0),
@@ -87,19 +88,19 @@ public class AnalyticsService : IAnalyticsService
                 WHERE ""TenantId"" = @TenantId
                   AND ""StoreId"" = @StoreId
                   AND ""Status"" = 2 -- Completed
-                  AND ""SaleDate"" >= @OneYearAgo"; // Limit scan
+                  AND DATE(""SaleDate"" - INTERVAL '5 hours') >= DATE(@MonthStart - INTERVAL '5 hours')";
 
             // Add parameters
             AddParam(command, "@TenantId", tenantId);
             AddParam(command, "@StoreId", storeId);
-            AddParam(command, "@Today", today);
-            AddParam(command, "@Tomorrow", tomorrow);
-            AddParam(command, "@Yesterday", yesterday);
-            AddParam(command, "@WeekStart", weekStart);
-            AddParam(command, "@LastWeekStart", lastWeekStart);
-            AddParam(command, "@MonthStart", monthStart);
-            AddParam(command, "@LastMonthStart", lastMonthStart);
-            AddParam(command, "@OneYearAgo", today.AddYears(-1));
+            AddParam(command, "@Today", DateTime.SpecifyKind(today, DateTimeKind.Utc));
+            AddParam(command, "@Tomorrow", DateTime.SpecifyKind(tomorrow, DateTimeKind.Utc));
+            AddParam(command, "@Yesterday", DateTime.SpecifyKind(yesterday, DateTimeKind.Utc));
+            AddParam(command, "@WeekStart", DateTime.SpecifyKind(weekStart, DateTimeKind.Utc));
+            AddParam(command, "@LastWeekStart", DateTime.SpecifyKind(lastWeekStart, DateTimeKind.Utc));
+            AddParam(command, "@MonthStart", DateTime.SpecifyKind(monthStart, DateTimeKind.Utc));
+            AddParam(command, "@LastMonthStart", DateTime.SpecifyKind(lastMonthStart, DateTimeKind.Utc));
+            AddParam(command, "@OneYearAgo", DateTime.SpecifyKind(today.AddYears(-1), DateTimeKind.Utc));
 
             decimal todayRevenue = 0, yesterdayRevenue = 0, weekRevenue = 0, lastWeekRevenue = 0, monthRevenue = 0, lastMonthRevenue = 0;
             decimal todayCost = 0;
@@ -121,20 +122,45 @@ public class AnalyticsService : IAnalyticsService
                     monthSalesCount = System.Convert.ToInt32(reader.GetValue(9));
                 }
             }
-
-            // Get Today's Cost separately to be accurate
-            command.CommandText = @"
-                SELECT COALESCE(SUM(si.""Quantity"" * COALESCE(si.""ConversionToBase"", 1) * (p.""PurchasePrice"" / COALESCE(pu.""ConversionToBase"", 1))), 0)
-                FROM sales.""Sales"" s
-                JOIN sales.""SaleItems"" si ON s.""Id"" = si.""SaleId""
-                JOIN product.""products"" p ON si.""ProductId"" = p.""Id""
-                LEFT JOIN product.""product_purchase_uoms"" pu ON p.""Id"" = pu.""ProductId"" AND pu.""IsDefault"" = true
-                WHERE s.""TenantId"" = @TenantId
-                  AND s.""StoreId"" = @StoreId
-                  AND s.""Status"" = 2
-                  AND s.""SaleDate"" >= @Today AND s.""SaleDate"" < @Tomorrow";
             
-            todayCost = (decimal)(await command.ExecuteScalarAsync() ?? 0m);
+            
+            command.Parameters.Clear();
+            AddParam(command, "@TenantId", tenantId);
+            AddParam(command, "@StoreId", storeId);
+            AddParam(command, "@Today", DateTime.SpecifyKind(today, DateTimeKind.Utc));
+            AddParam(command, "@Tomorrow", DateTime.SpecifyKind(tomorrow, DateTimeKind.Utc));
+            AddParam(command, "@MonthStart", DateTime.SpecifyKind(monthStart, DateTimeKind.Utc));
+
+            // Get Today's Cost and Expenses separately to be accurate
+            command.CommandText = @"
+                SELECT 
+                    (SELECT COALESCE(SUM(si.""Quantity"" * COALESCE(si.""ConversionToBase"", 1) * (p.""PurchasePrice"" / COALESCE(pu.""ConversionToBase"", 1))), 0)
+                     FROM sales.""SaleItems"" si
+                     JOIN sales.""Sales"" s ON s.""Id"" = si.""SaleId""
+                     JOIN product.""products"" p ON si.""ProductId"" = p.""Id""
+                     LEFT JOIN product.""product_purchase_uoms"" pu ON p.""Id"" = pu.""ProductId"" AND pu.""IsDefault"" = true
+                     WHERE s.""TenantId"" = @TenantId AND s.""StoreId"" = @StoreId AND s.""Status"" = 2
+                       AND DATE(s.""SaleDate"" - INTERVAL '5 hours') = DATE(@Today - INTERVAL '5 hours')),
+                    
+                    (SELECT COALESCE(SUM(""Amount""), 0)
+                     FROM sales.""Expenses""
+                     WHERE ""TenantId"" = @TenantId 
+                       AND ""StoreId"" = @StoreId 
+                       AND ""IsPaid"" = true
+                       AND ""IsActive"" = true
+                       AND ""DeletedAt"" IS NULL
+                       AND DATE(""Date"") = DATE(@Today - INTERVAL '5 hours'))
+            ";
+            
+            decimal todayExpenses = 0;
+            using (var reader = await command.ExecuteReaderAsync())
+            {
+                if (await reader.ReadAsync())
+                {
+                    todayCost = reader.GetDecimal(0);
+                    todayExpenses = reader.GetDecimal(1);
+                }
+            }
 
             // Calculations
             var revenueGrowth = yesterdayRevenue > 0 ? ((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100 : 0;
@@ -161,30 +187,24 @@ public class AnalyticsService : IAnalyticsService
                 }
             }
 
-            // Chart Data (Last 30 Days)
+            // Chart Data (Last 30 Days) - Use summary table for accurate costs/expenses
             var chartSummaries = new List<DailySalesSummaryDto>();
             command.CommandText = @"
                 SELECT 
-                    DATE(""SaleDate"" - INTERVAL '5 hours') as SaleDay,
-                    COUNT(*),
-                    SUM(""Total""),
-                    SUM(COALESCE(i_sum.""DayCost"", 0))
-                FROM sales.""Sales"" s
-                LEFT JOIN (
-                    SELECT 
-                        si.""SaleId"", 
-                        SUM(si.""Quantity"" * COALESCE(si.""ConversionToBase"", 1) * (p.""PurchasePrice"" / COALESCE(pu.""ConversionToBase"", 1))) as ""DayCost""
-                    FROM sales.""SaleItems"" si
-                    JOIN product.""products"" p ON si.""ProductId"" = p.""Id""
-                    LEFT JOIN product.""product_purchase_uoms"" pu ON p.""Id"" = pu.""ProductId"" AND pu.""IsDefault"" = true
-                    GROUP BY si.""SaleId""
-                ) i_sum ON s.""Id"" = i_sum.""SaleId""
-                WHERE s.""TenantId"" = @TenantId
-                  AND s.""StoreId"" = @StoreId
-                  AND s.""Status"" = 2
-                  AND s.""SaleDate"" >= @Start30Days
-                GROUP BY DATE(""SaleDate"" - INTERVAL '5 hours')
-                ORDER BY SaleDay";
+                    ""Date"",
+                    ""TotalSales"",
+                    ""TotalRevenue"",
+                    ""TotalCost"",
+                    ""TotalExpenses"",
+                    ""TotalProfit"",
+                    ""AverageTicket"",
+                    ""TotalItems"",
+                    ""TotalCustomers""
+                FROM analytics.""DailySalesSummaries""
+                WHERE ""TenantId"" = @TenantId
+                  AND ""StoreId"" = @StoreId
+                  AND ""Date"" >= @Start30Days
+                ORDER BY ""Date""";
             
             command.Parameters.Clear();
             AddParam(command, "@TenantId", tenantId);
@@ -199,31 +219,38 @@ public class AnalyticsService : IAnalyticsService
                 while (await reader.ReadAsync())
                 {
                     var date = reader.GetDateTime(0);
-                    var count = System.Convert.ToInt32(reader.GetValue(1));
-                    var total = reader.GetDecimal(2);
+                    var sales = Convert.ToInt32(reader.GetValue(1));
+                    var revenue = reader.GetDecimal(2);
                     var cost = reader.GetDecimal(3);
+                    var expenses = reader.GetDecimal(4);
+                    var profit = reader.GetDecimal(5);
+                    var ticket = reader.GetDecimal(6);
+                    var items = Convert.ToInt32(reader.GetValue(7));
+                    var customers = Convert.ToInt32(reader.GetValue(8));
                     
                     chartSummaries.Add(new DailySalesSummaryDto(
-                        Guid.Empty, tenantId, storeId, date, count, total, cost, total - cost, count > 0 ? total/count : 0, 0, 0
+                        Guid.Empty, tenantId, storeId, date, sales, revenue, cost, expenses, profit, ticket, items, customers
                     ));
                 }
             }
             
-            // Get Month Cost and Profit for dashboard
+            // Get Month Cost, Expenses and Profit for dashboard
             command.CommandText = @"
                 SELECT 
                     COALESCE(SUM(""TotalCost""), 0),
+                    COALESCE(SUM(""TotalExpenses""), 0),
                     COALESCE(SUM(""TotalProfit""), 0)
                 FROM analytics.""DailySalesSummaries""
                 WHERE ""TenantId"" = @TenantId AND ""StoreId"" = @StoreId AND ""Date"" >= @MonthStart";
             
-            decimal monthCost = 0, monthProfit = 0;
+            decimal monthCost = 0, monthExpenses = 0, monthProfit = 0;
             using (var reader = await command.ExecuteReaderAsync())
             {
                 if (await reader.ReadAsync())
                 {
                     monthCost = reader.GetDecimal(0);
-                    monthProfit = reader.GetDecimal(1);
+                    monthExpenses = reader.GetDecimal(1);
+                    monthProfit = reader.GetDecimal(2);
                 }
             }
 
@@ -320,7 +347,8 @@ public class AnalyticsService : IAnalyticsService
                 todaySales,
                 yesterdaySales,
                 todayCost,
-                todayRevenue - todayCost,
+                todayExpenses,
+                todayRevenue - todayCost - todayExpenses,
                 totalCustomers,
                 newCustomersThisMonth,
                 currentMonthAvgTicket,
@@ -332,6 +360,7 @@ public class AnalyticsService : IAnalyticsService
                 lastMonthRevenue,
                 monthGrowth,
                 monthCost,
+                monthExpenses,
                 monthProfit,
                 topProducts,
                 chartSummaries,
@@ -356,18 +385,23 @@ public class AnalyticsService : IAnalyticsService
 
     public async Task<SalesReportDto> GetSalesReportAsync(string tenantId, Guid storeId, DateTime fromDate, DateTime toDate)
     {
+        // Force summary generation to ensure report is up to date
+        // Note: In production this would be handled via events or background tasks
+        await GenerateDailySummariesAsync(tenantId, storeId, skipAi: true);
+
         // Extend toDate by one day to ensure we include the full end day (inclusive)
-        // This handles cases where boundaries might be fuzzy due to timezone or exact midnight timestamps
         var effectiveToDate = toDate.Date.AddDays(1);
         
         var summaries = await _context.DailySalesSummaries
             .Where(s => s.TenantId == tenantId && s.StoreId == storeId && s.Date >= fromDate.Date && s.Date < effectiveToDate)
             .OrderBy(s => s.Date)
+            .AsNoTracking()
             .ToListAsync();
 
         var totalSales = summaries.Sum(s => s.TotalSales);
         var totalRevenue = summaries.Sum(s => s.TotalRevenue);
         var totalCost = summaries.Sum(s => s.TotalCost);
+        var totalExpenses = summaries.Sum(s => s.TotalExpenses);
         var totalProfit = summaries.Sum(s => s.TotalProfit);
         var totalItems = summaries.Sum(s => s.TotalItems);
         var totalCustomers = summaries.Sum(s => s.TotalCustomers);
@@ -394,6 +428,7 @@ public class AnalyticsService : IAnalyticsService
                 s.TotalSales,
                 s.TotalRevenue,
                 s.TotalCost,
+                s.TotalExpenses,
                 s.TotalProfit,
                 s.AverageTicket,
                 s.TotalItems,
@@ -444,9 +479,12 @@ public class AnalyticsService : IAnalyticsService
 
     public async Task<IEnumerable<DailySalesSummaryDto>> GetDailySalesAsync(string tenantId, Guid storeId, DateTime fromDate, DateTime toDate)
     {
+        await GenerateDailySummariesAsync(tenantId, storeId, skipAi: true);
+
         return await _context.DailySalesSummaries
             .Where(s => s.TenantId == tenantId && s.StoreId == storeId && s.Date >= fromDate.Date && s.Date <= toDate.Date)
             .OrderBy(s => s.Date)
+            .AsNoTracking()
             .Select(s => new DailySalesSummaryDto(
                 s.Id,
                 s.TenantId,
@@ -455,6 +493,7 @@ public class AnalyticsService : IAnalyticsService
                 s.TotalSales,
                 s.TotalRevenue,
                 s.TotalCost,
+                s.TotalExpenses,
                 s.TotalProfit,
                 s.AverageTicket,
                 s.TotalItems,
@@ -668,7 +707,7 @@ public class AnalyticsService : IAnalyticsService
                         Id = Guid.NewGuid(),
                         TenantId = tenantId,
                         StoreId = storeId,
-                        Date = DateTime.SpecifyKind(DateTime.Today, DateTimeKind.Utc),
+                        Date = DateTime.UtcNow.Date,
                         Section = "Analizador de Inventario",
                         Content = aiSummary,
                         Type = "InventoryInsight",
@@ -690,7 +729,7 @@ public class AnalyticsService : IAnalyticsService
                             Id = Guid.NewGuid(),
                             TenantId = tenantId,
                             StoreId = storeId,
-                            Date = DateTime.SpecifyKind(DateTime.Today, DateTimeKind.Utc),
+                            Date = DateTime.UtcNow.Date,
                             Section = "Analizador de Inventario",
                             Content = aiSummary,
                             Type = "Error",
@@ -868,22 +907,74 @@ public class AnalyticsService : IAnalyticsService
 
         try
         {
-            // Debug counts
+            // FILE DEBUGGING
             using (var debugCmd = connection.CreateCommand())
             {
-                debugCmd.CommandText = @"SELECT COUNT(*) FROM sales.""Sales"" WHERE ""TenantId"" = @T AND ""StoreId"" = @S";
+                var logPath = @"C:\github\Profitzen\debug_analytics.txt";
+                var logMsg = new System.Text.StringBuilder();
+                logMsg.AppendLine($"--- DEBUG GENERATION {DateTime.Now} ---");
+                logMsg.AppendLine($"Target Tenant: {tenantId}");
+                logMsg.AppendLine($"Target Store: {storeId}");
+
                 AddParam(debugCmd, "@T", tenantId);
                 AddParam(debugCmd, "@S", storeId);
-                var totalSales = await debugCmd.ExecuteScalarAsync();
-                Console.WriteLine($"[Analytics] Total Sales found: {totalSales}");
 
-                debugCmd.CommandText = @"SELECT COUNT(*) FROM sales.""Sales"" WHERE ""TenantId"" = @T AND ""StoreId"" = @S AND ""Status"" = 1";
-                var pendingSales = await debugCmd.ExecuteScalarAsync();
-                Console.WriteLine($"[Analytics] Pending Sales (Status=1): {pendingSales}");
+                // 1. Check Matching Expenses
+                debugCmd.CommandText = @"
+                    SELECT ""Id"", ""Date"", ""Amount"", ""IsPaid"", ""DeletedAt"", ""TenantId"", ""StoreId"" 
+                    FROM sales.""Expenses"" 
+                    WHERE ""TenantId"" = @T AND ""StoreId"" = @S 
+                    ORDER BY ""Date"" DESC LIMIT 10";
+                
+                logMsg.AppendLine("-- MATCHING EXPENSES --");
+                using (var r = await debugCmd.ExecuteReaderAsync())
+                {
+                    if (!r.HasRows) logMsg.AppendLine("NO MATCHING EXPENSES FOUND.");
+                    while(await r.ReadAsync())
+                    {
+                        var id = r.GetGuid(0);
+                        var dt = r.GetDateTime(1);
+                        var amt = r.GetDecimal(2);
+                        var del = r.IsDBNull(4) ? "NULL" : r.GetDateTime(4).ToString();
+                        logMsg.AppendLine($"MATCH: Exp {id} | Date={dt} | Amt={amt} | Del={del}");
+                    }
+                }
 
-                debugCmd.CommandText = @"SELECT COUNT(*) FROM sales.""Sales"" WHERE ""TenantId"" = @T AND ""StoreId"" = @S AND ""Status"" = 2";
-                var completedSales = await debugCmd.ExecuteScalarAsync();
-                Console.WriteLine($"[Analytics] Completed Sales (Status=2) before fix: {completedSales}");
+                // 2. Check Global Expenses (Potential Mismatch)
+                debugCmd.CommandText = @"
+                    SELECT ""Id"", ""Date"", ""Amount"", ""TenantId"", ""StoreId"", ""Description""
+                    FROM sales.""Expenses"" 
+                    ORDER BY ""Date"" DESC LIMIT 10";
+                
+                logMsg.AppendLine("-- RECENT GLOBAL EXPENSES (NO FILTER) --");
+                using (var r = await debugCmd.ExecuteReaderAsync())
+                {
+                    while(await r.ReadAsync())
+                    {
+                         var id = r.GetGuid(0);
+                         var dt = r.GetDateTime(1);
+                         var amt = r.GetDecimal(2);
+                         var tId = r.GetString(3);
+                         var sId = r.GetGuid(4);
+                         var desc = r.GetString(5);
+                         
+                         logMsg.Append($"GLOBAL: {desc} ({amt}) | T={tId} | S={sId}");
+                         
+                         if (tId != tenantId) logMsg.Append(" [MISMATCH TENANT]");
+                         if (sId != storeId) logMsg.Append(" [MISMATCH STORE]");
+                         if (tId == tenantId && sId == storeId) logMsg.Append(" [MATCH]");
+                         
+                         logMsg.AppendLine();
+                    }
+                }
+                logMsg.AppendLine("---------------------------------------");
+                
+                // Write to file
+                try {
+                    await System.IO.File.AppendAllTextAsync(logPath, logMsg.ToString());
+                } catch (Exception ex) {
+                    Console.WriteLine("Could not write to log file: " + ex.Message);
+                }
             }
 
             // 1. Clear existing
@@ -899,36 +990,58 @@ public class AnalyticsService : IAnalyticsService
             var command = connection.CreateCommand();
             command.CommandText = @"
                 INSERT INTO analytics.""DailySalesSummaries"" 
-                (""Id"", ""TenantId"", ""StoreId"", ""Date"", ""TotalSales"", ""TotalRevenue"", ""TotalCost"", ""TotalProfit"", ""AverageTicket"", ""TotalItems"", ""TotalCustomers"", ""CreatedAt"", ""UpdatedAt"")
+                (""Id"", ""TenantId"", ""StoreId"", ""Date"", ""TotalSales"", ""TotalRevenue"", ""TotalCost"", ""TotalExpenses"", ""TotalProfit"", ""AverageTicket"", ""TotalItems"", ""TotalCustomers"", ""CreatedAt"", ""UpdatedAt"")
                 SELECT
                     gen_random_uuid(),
                     @TenantId,
                     @StoreId,
-                    DATE(s.""SaleDate""),
-                    COUNT(*),
-                    SUM(s.""Total""),
-                    COALESCE(SUM(i_sum.""TotalCost""), 0), 
-                    SUM(s.""Total"") - COALESCE(SUM(i_sum.""TotalCost""), 0),
-                    AVG(s.""Total""),
-                    COALESCE(SUM(i_sum.""TotalItems""), 0),
-                    COUNT(DISTINCT s.""Id""),
+                    d.day,
+                    COALESCE(s_sum.""Count"", 0),
+                    COALESCE(s_sum.""Revenue"", 0),
+                    COALESCE(s_sum.""Cost"", 0),
+                    COALESCE(e_sum.""Expenses"", 0),
+                    COALESCE(s_sum.""Revenue"", 0) - COALESCE(s_sum.""Cost"", 0) - COALESCE(e_sum.""Expenses"", 0),
+                    CASE WHEN COALESCE(s_sum.""Count"", 0) > 0 THEN s_sum.""Revenue"" / s_sum.""Count"" ELSE 0 END,
+                    COALESCE(s_sum.""Items"", 0),
+                    COALESCE(s_sum.""Customers"", 0),
                     NOW(),
                     NOW()
-                FROM sales.""Sales"" s
+                FROM (
+                    SELECT DISTINCT DATE(""SaleDate"" - INTERVAL '5 hours') as day FROM sales.""Sales"" WHERE ""TenantId"" = @TenantId AND ""StoreId"" = @StoreId AND ""DeletedAt"" IS NULL
+                    UNION
+                    SELECT DISTINCT DATE(""Date"") as day FROM sales.""Expenses"" WHERE ""TenantId"" = @TenantId AND ""StoreId"" = @StoreId AND ""DeletedAt"" IS NULL AND ""IsActive"" = true
+                ) d
                 LEFT JOIN (
                     SELECT 
-                        si.""SaleId"", 
-                        SUM(si.""Quantity"") as ""TotalItems"",
-                        SUM(si.""Quantity"" * COALESCE(si.""ConversionToBase"", 1) * (p.""PurchasePrice"" / COALESCE(pu.""ConversionToBase"", 1))) as ""TotalCost"" 
-                    FROM sales.""SaleItems"" si
-                    JOIN product.""products"" p ON si.""ProductId"" = p.""Id""
-                    LEFT JOIN product.""product_purchase_uoms"" pu ON p.""Id"" = pu.""ProductId"" AND pu.""IsDefault"" = true
-                    GROUP BY si.""SaleId""
-                ) i_sum ON s.""Id"" = i_sum.""SaleId""
-                WHERE s.""TenantId"" = @TenantId
-                  AND s.""StoreId"" = @StoreId
-                  AND s.""Status"" = 2
-                GROUP BY DATE(s.""SaleDate"")";
+                        DATE(s.""SaleDate"" - INTERVAL '5 hours') as day,
+                        COUNT(*) as ""Count"",
+                        SUM(s.""Total"") as ""Revenue"",
+                        SUM(COALESCE(i_sum.""TotalCost"", 0)) as ""Cost"",
+                        SUM(COALESCE(i_sum.""TotalItems"", 0)) as ""Items"",
+                        COUNT(DISTINCT s.""Id"") as ""Customers""
+                    FROM sales.""Sales"" s
+                    LEFT JOIN (
+                        SELECT 
+                            si.""SaleId"", 
+                            SUM(si.""Quantity"") as ""TotalItems"",
+                            SUM(si.""Quantity"" * COALESCE(si.""ConversionToBase"", 1) * (p.""PurchasePrice"" / COALESCE(pu.""ConversionToBase"", 1))) as ""TotalCost"" 
+                        FROM sales.""SaleItems"" si
+                        JOIN product.""products"" p ON si.""ProductId"" = p.""Id""
+                        LEFT JOIN product.""product_purchase_uoms"" pu ON p.""Id"" = pu.""ProductId"" AND pu.""IsDefault"" = true
+                        GROUP BY si.""SaleId""
+                    ) i_sum ON s.""Id"" = i_sum.""SaleId""
+                    WHERE s.""TenantId"" = @TenantId AND s.""StoreId"" = @StoreId AND s.""Status"" = 2 AND s.""DeletedAt"" IS NULL
+                    GROUP BY DATE(s.""SaleDate"" - INTERVAL '5 hours')
+                ) s_sum ON d.day = s_sum.day
+                LEFT JOIN (
+                    SELECT 
+                        DATE(""Date"") as day,
+                        SUM(""Amount"") as ""Expenses""
+                    FROM sales.""Expenses""
+                    WHERE ""TenantId"" = @TenantId AND ""StoreId"" = @StoreId AND ""IsPaid"" = true AND ""DeletedAt"" IS NULL AND ""IsActive"" = true
+                    GROUP BY DATE(""Date"")
+                ) e_sum ON d.day = e_sum.day
+                WHERE s_sum.day IS NOT NULL OR e_sum.day IS NOT NULL";
 
             AddParam(command, "@TenantId", tenantId);
             AddParam(command, "@StoreId", storeId);
@@ -1016,7 +1129,7 @@ public class AnalyticsService : IAnalyticsService
         try
         {
             // Gather context data for the AI
-            var yesterday = DateTime.Today.AddDays(-1);
+            var yesterday = DateTime.UtcNow.Date.AddDays(-1);
             var summary = await _context.DailySalesSummaries
                 .OrderByDescending(s => s.Date)
                 .FirstOrDefaultAsync(s => s.TenantId == tenantId && s.StoreId == storeId);
@@ -1065,7 +1178,7 @@ public class AnalyticsService : IAnalyticsService
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
                 StoreId = storeId,
-                Date = DateTime.SpecifyKind(DateTime.Today, DateTimeKind.Utc),
+                Date = DateTime.UtcNow.Date,
                 Section = "Vigilante Nocturno",
                 Content = content,
                 Type = "DailyInsight",

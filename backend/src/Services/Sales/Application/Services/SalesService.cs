@@ -295,6 +295,7 @@ public class SalesService : ISalesService
 
              var success = await _customerClient.CreateCreditAsync(
                  sale.CustomerId.Value, 
+                 sale.StoreId,
                  creditPayment.Amount, 
                  DateTime.UtcNow.AddDays(30),
                  $"Venta a Crédito #{sale.SaleNumber}",

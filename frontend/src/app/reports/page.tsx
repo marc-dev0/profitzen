@@ -7,11 +7,12 @@ import { useSalesReport, useProductPerformance, useRecalculateAnalytics } from '
 import { FormattedDateInput } from '@/components/ui/formatted-date-input';
 import AppLayout from '@/components/layout/AppLayout';
 import { DataTable, Column } from '@/components/DataTable';
-import { Download, Filter, Calendar as CalendarIcon, TrendingUp, DollarSign, Package, Users, RefreshCw } from 'lucide-react';
+import { Download, Filter, Calendar as CalendarIcon, TrendingUp, TrendingDown, DollarSign, Package, Users, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { toast } from 'sonner';
+import { getLocalTodayString, formatDateUTC } from '@/utils/dateUtils';
 import {
     BarChart,
     Bar,
@@ -28,8 +29,8 @@ export default function ReportsPage() {
     const router = useRouter();
     const { user, isAuthenticated, _hasHydrated } = useAuthStore();
     const [dateRange, setDateRange] = useState({
-        from: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0],
-        to: new Date().toISOString().split('T')[0]
+        from: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0], // Keep 30 days logic but could use getLocalTodayString for 'to'
+        to: getLocalTodayString()
     });
     const [activeTab, setActiveTab] = useState<'sales' | 'products'>('sales');
 
@@ -88,18 +89,14 @@ export default function ReportsPage() {
 
         // 2. Sheet: Ventas Diarias
         const dailyData = salesReport.dailySummaries.map(s => {
-            const d = new Date(s.date);
-            // Use UTC methods for consistency
-            const day = d.getUTCDate().toString().padStart(2, '0');
-            const month = (d.getUTCMonth() + 1).toString().padStart(2, '0');
-            const year = d.getUTCFullYear();
-
             return {
-                Fecha: `${day}/${month}/${year}`,
+                Fecha: formatDateUTC(s.date),
                 Transacciones: s.totalSales,
+                Pedidos: s.totalSales,
                 Ingresos: s.totalRevenue,
-                Costo: s.totalCost,
-                Utilidad: s.totalProfit,
+                Costo_Venta: s.totalCost,
+                Gastos: s.totalExpenses,
+                Utilidad_Neta: s.totalProfit,
                 TicketProm: s.averageTicket
             };
         });
@@ -187,7 +184,7 @@ export default function ReportsPage() {
                 {activeTab === 'sales' && (
                     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
                         {/* KPI Cards */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                             <div className="bg-card p-6 rounded-xl border shadow-sm">
                                 <div className="flex items-center gap-4">
                                     <div className="p-3 bg-blue-100 text-blue-600 rounded-lg">
@@ -201,13 +198,35 @@ export default function ReportsPage() {
                             </div>
                             <div className="bg-card p-6 rounded-xl border shadow-sm">
                                 <div className="flex items-center gap-4">
+                                    <div className="p-3 bg-red-100 text-red-600 rounded-lg">
+                                        <TrendingDown className="w-6 h-6" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-muted-foreground">Gastos Totales</p>
+                                        <h3 className="text-2xl font-bold">{formatCurrency(salesReport?.dailySummaries.reduce((acc, s) => acc + (s.totalExpenses || 0), 0) || 0)}</h3>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-card p-6 rounded-xl border shadow-sm">
+                                <div className="flex items-center gap-4">
                                     <div className="p-3 bg-green-100 text-green-600 rounded-lg">
                                         <TrendingUp className="w-6 h-6" />
                                     </div>
                                     <div>
                                         <p className="text-sm font-medium text-muted-foreground">Utilidad Neta</p>
                                         <h3 className="text-2xl font-bold">{formatCurrency(salesReport?.totalProfit || 0)}</h3>
-                                        <span className="text-xs text-green-600 font-medium">{salesReport?.profitMargin.toFixed(1)}% Margen</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="bg-card p-6 rounded-xl border shadow-sm">
+                                <div className="flex items-center gap-4">
+                                    <div className="p-3 bg-yellow-100 text-yellow-600 rounded-lg">
+                                        <TrendingUp className="w-6 h-6" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-muted-foreground">Margen de Utilidad</p>
+                                        <h3 className="text-2xl font-bold">{salesReport?.profitMargin.toFixed(1)}%</h3>
                                     </div>
                                 </div>
                             </div>
@@ -220,17 +239,6 @@ export default function ReportsPage() {
                                         <p className="text-sm font-medium text-muted-foreground">Ventas Totales</p>
                                         <h3 className="text-2xl font-bold">{salesReport?.totalSales || 0}</h3>
                                         <span className="text-xs text-muted-foreground">{salesReport?.totalItems || 0} items</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="bg-card p-6 rounded-xl border shadow-sm">
-                                <div className="flex items-center gap-4">
-                                    <div className="p-3 bg-orange-100 text-orange-600 rounded-lg">
-                                        <Users className="w-6 h-6" />
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-medium text-muted-foreground">Ticket Promedio</p>
-                                        <h3 className="text-2xl font-bold">{formatCurrency(salesReport?.averageTicket || 0)}</h3>
                                     </div>
                                 </div>
                             </div>
@@ -248,9 +256,8 @@ export default function ReportsPage() {
                                         <XAxis
                                             dataKey="date"
                                             tickFormatter={(val) => {
-                                                const d = new Date(val);
-                                                // Manual dd/MM format
-                                                return `${d.getUTCDate().toString().padStart(2, '0')}/${(d.getUTCMonth() + 1).toString().padStart(2, '0')}`;
+                                                const parts = formatDateUTC(val).split('/');
+                                                return `${parts[0]}/${parts[1]}`;
                                             }}
                                             stroke="#9CA3AF"
                                             fontSize={12}
@@ -267,11 +274,7 @@ export default function ReportsPage() {
                                         <Tooltip
                                             contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #E5E7EB', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                             formatter={(val: number | undefined) => [formatCurrency(val || 0), 'Ventas']}
-                                            labelFormatter={(label) => {
-                                                const d = new Date(label);
-                                                // Manual dd/MM/yyyy format
-                                                return `${d.getUTCDate().toString().padStart(2, '0')}/${(d.getUTCMonth() + 1).toString().padStart(2, '0')}/${d.getUTCFullYear()}`;
-                                            }}
+                                            labelFormatter={(label) => formatDateUTC(label)}
                                         />
                                         <Line
                                             type="monotone"
@@ -300,13 +303,7 @@ export default function ReportsPage() {
                                         key: 'date',
                                         header: 'Fecha',
                                         sortable: true,
-                                        render: (row) => {
-                                            const d = new Date(row.date);
-                                            const day = d.getUTCDate().toString().padStart(2, '0');
-                                            const month = (d.getUTCMonth() + 1).toString().padStart(2, '0');
-                                            const year = d.getUTCFullYear();
-                                            return `${day}/${month}/${year}`;
-                                        }
+                                        render: (row) => formatDateUTC(row.date)
                                     },
                                     {
                                         key: 'totalSales',
@@ -333,11 +330,23 @@ export default function ReportsPage() {
                                         )
                                     },
                                     {
+                                        key: 'totalCost',
+                                        header: 'Costo Ventas',
+                                        sortable: true,
+                                        render: (row) => <div className="text-right text-muted-foreground">{formatCurrency(row.totalCost)}</div>
+                                    },
+                                    {
+                                        key: 'totalExpenses',
+                                        header: 'Gastos',
+                                        sortable: true,
+                                        render: (row) => <div className="text-right text-red-500 font-medium">{formatCurrency(row.totalExpenses)}</div>
+                                    },
+                                    {
                                         key: 'totalProfit',
-                                        header: 'Utilidad',
+                                        header: 'Utilidad Neta',
                                         sortable: true,
                                         render: (row) => (
-                                            <div className="text-right font-bold text-green-600">{formatCurrency(row.totalProfit)}</div>
+                                            <div className={`text-right font-bold ${row.totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(row.totalProfit)}</div>
                                         )
                                     }
                                 ]}

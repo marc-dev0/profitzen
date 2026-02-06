@@ -61,6 +61,13 @@ export interface CreditPayment {
     notes?: string;
 }
 
+export interface CreditPaymentDetail extends CreditPayment {
+    creditId: string;
+    customerId: string;
+    customerName: string;
+    storeId: string;
+}
+
 export interface Credit {
     id: string;
     customerId: string;

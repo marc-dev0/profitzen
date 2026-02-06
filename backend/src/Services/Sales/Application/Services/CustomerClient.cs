@@ -80,7 +80,7 @@ public class CustomerClient : ICustomerClient
         }
     }
 
-    public async Task<bool> CreateCreditAsync(Guid customerId, decimal amount, DateTime? dueDate, string notes, string tenantId)
+    public async Task<bool> CreateCreditAsync(Guid customerId, Guid storeId, decimal amount, DateTime? dueDate, string notes, string tenantId)
     {
         var customerServiceUrl = _configuration["Services:Customer:Url"];
         if (string.IsNullOrEmpty(customerServiceUrl))
@@ -91,14 +91,15 @@ public class CustomerClient : ICustomerClient
 
         try
         {
-            _logger.LogInformation("Creating credit in Customer Service. CustomerId: {CustomerId}, Amount: {Amount}",
-                customerId, amount);
+            _logger.LogInformation("Creating credit in Customer Service. CustomerId: {CustomerId}, StoreId: {StoreId}, Amount: {Amount}",
+                customerId, storeId, amount);
 
             var client = _serviceHttpClient.CreateClient(tenantId: tenantId);
 
             var request = new 
             {
                 CustomerId = customerId,
+                StoreId = storeId,
                 Amount = amount,
                 DueDate = dueDate,
                 Notes = notes

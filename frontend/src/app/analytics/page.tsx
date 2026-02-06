@@ -291,11 +291,11 @@ export default function AnalyticsPage() {
                     {/* 
                     <button
                         onClick={() => router.push('/analytics/ia')}
-                        className="p-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg hover:shadow-indigo-500/30 transition-all font-bold flex items-center gap-2"
+                        className="p-3 bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-700 bg-size-200 animate-gradient-x text-white rounded-xl hover:shadow-lg hover:shadow-indigo-500/30 transition-all font-bold flex items-center gap-2 border border-white/10"
                     >
                         <BrainCircuit className="w-6 h-6" />
                         Analizador IA
-                        <Sparkles className="w-4 h-4 text-yellow-300" />
+                        <Sparkles className="w-4 h-4 text-yellow-300 animate-pulse" />
                     </button>
                     */}
                 </div>

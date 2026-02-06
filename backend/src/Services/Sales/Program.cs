@@ -30,6 +30,7 @@ builder.Services.AddControllers()
     .AddJsonOptions(options => 
     {
         options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
     });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -63,8 +64,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ISalesService, SalesService>();
+builder.Services.AddScoped<IExpenseService, ExpenseService>();
 builder.Services.AddScoped<IInventoryClient, InventoryClient>();
 builder.Services.AddScoped<ICustomerClient, CustomerClient>();
+builder.Services.AddScoped<ICashShiftService, CashShiftService>();
 builder.Services.AddHttpClient<IConfigurationClient, ConfigurationClient>();
 builder.Services.AddServiceAuth();
 

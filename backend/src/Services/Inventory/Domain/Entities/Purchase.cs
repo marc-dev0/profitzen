@@ -1,5 +1,6 @@
 using Profitzen.Common.Domain;
 using Profitzen.Inventory.Domain.Enums;
+using Profitzen.Common.Extensions;
 
 namespace Profitzen.Inventory.Domain.Entities;
 
@@ -40,7 +41,7 @@ public class Purchase : BaseEntity
         SupplierId = supplierId;
         StoreId = storeId;
         DocumentType = documentType;
-        PurchaseDate = purchaseDate;
+        PurchaseDate = purchaseDate.ToBusinessDate();
         InvoiceNumber = invoiceNumber;
         Notes = notes;
         CreatedByUserId = createdByUserId;

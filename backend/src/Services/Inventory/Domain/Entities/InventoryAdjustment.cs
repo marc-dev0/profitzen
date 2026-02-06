@@ -1,5 +1,6 @@
 using Profitzen.Common.Domain;
 using Profitzen.Inventory.Domain.Enums;
+using Profitzen.Common.Extensions;
 
 namespace Profitzen.Inventory.Domain.Entities;
 
@@ -39,6 +40,6 @@ public class InventoryAdjustment : BaseEntity
         NewStock = isPositive ? previousStock + quantity : previousStock - quantity;
         Reason = reason;
         UserId = userId;
-        AdjustmentDate = DateTime.UtcNow;
+        AdjustmentDate = DateTime.UtcNow.ToBusinessDate();
     }
 }

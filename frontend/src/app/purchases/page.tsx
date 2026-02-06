@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { getLocalTodayString, formatDateUTC, toNoonISO } from '@/utils/dateUtils';
 import { Plus, Printer } from 'lucide-react';
 import { generatePurchasePDF } from '@/utils/pdfGenerator';
 import type { CreatePurchaseDetailRequest, ProductSearchResult, PurchaseStatus } from '@/types/inventory';
@@ -90,7 +91,7 @@ export default function PurchasesPage() {
     storeId: user?.currentStoreId || '', // Added
     supplierId: '',
     documentType: '',
-    purchaseDate: new Date().toISOString().split('T')[0],
+    purchaseDate: getLocalTodayString(),
     invoiceNumber: '',
     notes: '',
   });
@@ -439,15 +440,11 @@ export default function PurchasesPage() {
     }
 
     try {
-      const now = new Date();
-      const [year, month, day] = formData.purchaseDate.split('-').map(Number);
-      const purchaseDateTime = new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds());
-
       await createPurchase.mutateAsync({
         storeId: formData.storeId,
         supplierId: formData.supplierId,
         documentType: formData.documentType,
-        purchaseDate: purchaseDateTime.toISOString(),
+        purchaseDate: toNoonISO(formData.purchaseDate),
         invoiceNumber: formData.invoiceNumber?.trim() || '',
         notes: formData.notes || undefined,
         details,
@@ -457,7 +454,7 @@ export default function PurchasesPage() {
         storeId: user?.currentStoreId || '',
         supplierId: '',
         documentType: '',
-        purchaseDate: new Date().toISOString().split('T')[0],
+        purchaseDate: getLocalTodayString(),
         invoiceNumber: '',
         notes: '',
       });
@@ -476,14 +473,7 @@ export default function PurchasesPage() {
     }).format(value);
   };
 
-  const formatDate = (dateString: string) => {
-    // Use UTC to avoid timezone shifts
-    const date = new Date(dateString);
-    const day = date.getUTCDate().toString().padStart(2, '0');
-    const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
-    const year = date.getUTCFullYear();
-    return `${day}/${month}/${year}`;
-  };
+  const formatDate = (dateString: string) => formatDateUTC(dateString);
 
   const getUOMName = (uomId: string) => {
     const uom = uoms?.find(u => u.id === uomId);

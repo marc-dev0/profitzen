@@ -11,8 +11,10 @@ export interface DashboardData {
   lastMonthRevenue: number;
   monthGrowthPercentage: number;
   monthCost: number;
+  monthExpenses: number;
   monthProfit: number;
   todayCost: number;
+  todayExpenses: number;
   todayProfit: number;
   averageTicket: number;
   lastMonthAverageTicket: number;
@@ -45,6 +47,7 @@ export interface DailySales {
   totalRevenue: number;
   totalSales: number;
   totalCost: number;
+  totalExpenses: number;
   totalProfit: number;
   averageTicket: number;
   totalItems: number;

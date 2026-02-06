@@ -57,6 +57,9 @@ namespace Profitzen.Analytics.Infrastructure.Migrations
                     b.Property<int>("TotalCustomers")
                         .HasColumnType("integer");
 
+                    b.Property<decimal>("TotalExpenses")
+                        .HasColumnType("numeric");
+
                     b.Property<int>("TotalItems")
                         .HasColumnType("integer");
 

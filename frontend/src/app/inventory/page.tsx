@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import { formatDateUTC } from '@/utils/dateUtils';
 import { useAuthStore } from '@/store/authStore';
 import apiClient from '@/lib/axios';
 import {
@@ -647,13 +648,7 @@ export default function InventarioPage() {
             sortable: true,
             render: (movement) => (
                 <span className="text-sm text-muted-foreground">
-                    {new Date(movement.movementDate).toLocaleString('es-PE', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                    })}
+                    {formatDateUTC(movement.movementDate)}
                 </span>
             )
         },

@@ -62,6 +62,9 @@ namespace Profitzen.Customer.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasColumnType("text");
@@ -106,6 +109,9 @@ namespace Profitzen.Customer.Migrations
                     b.Property<DateTime>("PaymentDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasColumnType("text");
@@ -118,6 +124,8 @@ namespace Profitzen.Customer.Migrations
                     b.HasIndex("CreditId");
 
                     b.HasIndex("PaymentDate");
+
+                    b.HasIndex("StoreId");
 
                     b.ToTable("CreditPayments", "customer");
                 });

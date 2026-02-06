@@ -226,6 +226,14 @@ public class CustomerController : ControllerBase
         }
     }
 
+    [HttpGet("credits/payments")]
+    public async Task<IActionResult> GetCreditPayments([FromQuery] Guid? storeId, [FromQuery] DateTime? fromDate, [FromQuery] DateTime? toDate)
+    {
+        var tenantId = GetCurrentTenantId();
+        var payments = await _customerService.GetCreditPaymentsAsync(tenantId, storeId, fromDate, toDate);
+        return Ok(payments);
+    }
+
     [HttpGet("credits/overdue")]
     public async Task<IActionResult> GetOverdueCredits()
     {

@@ -356,3 +356,117 @@ export const generatePurchasePDF = (data: PurchasePDFData) => {
 
     doc.save(`Compra_${data.purchaseNumber}.pdf`);
 };
+
+export interface CashShiftTicketData {
+    id: string;
+    userName: string;
+    storeName: string;
+    startTime: string;
+    endTime: string;
+    startAmount: number;
+    totalSalesCash: number;
+    totalCreditCollections: number;
+    totalCashIn: number;
+    totalCashOut: number;
+    totalExpenses: number;
+    expectedCashEndAmount: number;
+    actualCashEndAmount: number;
+    difference: number;
+    notes?: string | null;
+}
+
+export const generateCashShiftTicket = (data: CashShiftTicketData) => {
+    // Thermal printer simulation (80mm width approx 226 points)
+    const pageWidth = 80;
+    const doc = new jsPDF({
+        unit: 'mm',
+        format: [pageWidth, 180] // Dynamic height but starting with a reasonable one
+    });
+
+    const centerX = pageWidth / 2;
+    let currentY = 10;
+
+    // Header
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text('Profitzen', centerX, currentY, { align: 'center' });
+    currentY += 6;
+
+    doc.setFontSize(10);
+    doc.text('CIERRE DE CAJA', centerX, currentY, { align: 'center' });
+    currentY += 8;
+
+    // Info
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Tienda: ${data.storeName}`, 5, currentY);
+    currentY += 4;
+    doc.text(`Cajero: ${data.userName}`, 5, currentY);
+    currentY += 4;
+    doc.text(`ID Turno: ${data.id.substring(0, 8)}`, 5, currentY);
+    currentY += 6;
+
+    doc.setFontSize(7);
+    doc.text(`Inicio: ${new Date(data.startTime).toLocaleString('es-PE')}`, 5, currentY);
+    currentY += 4;
+    doc.text(`Cierre: ${new Date(data.endTime).toLocaleString('es-PE')}`, 5, currentY);
+    currentY += 6;
+
+    // Divider
+    doc.line(5, currentY, pageWidth - 5, currentY);
+    currentY += 6;
+
+    // Totals Table Simulation
+    const drawRow = (label: string, value: string, isBold = false) => {
+        if (isBold) doc.setFont("helvetica", "bold");
+        else doc.setFont("helvetica", "normal");
+
+        doc.text(label, 5, currentY);
+        doc.text(value, pageWidth - 5, currentY, { align: 'right' });
+        currentY += 5;
+    };
+
+    const formatCur = (val: number) => `S/ ${val.toFixed(2)}`;
+
+    drawRow('Monto Inicial:', formatCur(data.startAmount));
+    drawRow('Ventas Efectivo:', `+${formatCur(data.totalSalesCash)}`);
+    drawRow('Cobranzas Cred.:', `+${formatCur(data.totalCreditCollections)}`);
+    drawRow('Ingresos Manual:', `+${formatCur(data.totalCashIn)}`);
+    drawRow('Salidas Manual:', `-${formatCur(data.totalCashOut)}`);
+    drawRow('Gastos Efectivo:', `-${formatCur(data.totalExpenses)}`);
+
+    currentY += 2;
+    doc.line(40, currentY, pageWidth - 5, currentY);
+    currentY += 6;
+
+    drawRow('SALDO ESPERADO:', formatCur(data.expectedCashEndAmount), true);
+    drawRow('MONTO EN CAJA:', formatCur(data.actualCashEndAmount), true);
+
+    currentY += 2;
+    // Highlight difference
+    if (data.difference !== 0) {
+        doc.setTextColor(data.difference > 0 ? 0 : 200, 0, 0); // Simple red if difference
+        drawRow('DIFERENCIA:', (data.difference > 0 ? '+' : '') + formatCur(data.difference), true);
+        doc.setTextColor(0, 0, 0);
+    } else {
+        drawRow('DIFERENCIA:', 'S/ 0.00', true);
+    }
+
+    currentY += 5;
+    if (data.notes) {
+        doc.setFontSize(7);
+        doc.setFont("helvetica", "italic");
+        const splitNotes = doc.splitTextToSize(`Notas: ${data.notes}`, pageWidth - 10);
+        doc.text(splitNotes, 5, currentY);
+        currentY += (splitNotes.length * 4);
+    }
+
+    currentY += 10;
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.text('_________________________', centerX, currentY, { align: 'center' });
+    currentY += 4;
+    doc.text('FIRMA RESPONSABLE', centerX, currentY, { align: 'center' });
+
+    doc.save(`Cierre_Caja_${data.id.substring(0, 8)}.pdf`);
+};

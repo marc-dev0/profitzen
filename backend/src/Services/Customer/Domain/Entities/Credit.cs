@@ -1,4 +1,5 @@
 using Profitzen.Common.Domain;
+using Profitzen.Common.Extensions;
 
 namespace Profitzen.Customer.Domain.Entities;
 
@@ -6,6 +7,7 @@ public class Credit : BaseEntity
 {
     public string TenantId { get; private set; } = string.Empty;
     public Guid CustomerId { get; private set; }
+    public Guid StoreId { get; private set; } // Added StoreId
     public decimal Amount { get; private set; }
     public decimal RemainingAmount { get; private set; }
     public DateTime CreditDate { get; private set; }
@@ -19,19 +21,20 @@ public class Credit : BaseEntity
 
     private Credit() { }
 
-    public Credit(string tenantId, Guid customerId, decimal amount, DateTime? dueDate = null, string? notes = null)
+    public Credit(string tenantId, Guid customerId, Guid storeId, decimal amount, DateTime? dueDate = null, string? notes = null)
     {
         TenantId = tenantId;
         CustomerId = customerId;
+        StoreId = storeId;
         Amount = amount;
         RemainingAmount = amount;
-        CreditDate = DateTime.UtcNow;
-        DueDate = dueDate;
+        CreditDate = DateTime.UtcNow.ToBusinessDate();
+        DueDate = dueDate?.ToBusinessDate();
         IsPaid = false;
         Notes = notes;
     }
 
-    public void AddPayment(decimal amount, string? notes = null)
+    public void AddPayment(Guid storeId, decimal amount, string? notes = null)
     {
         if (amount <= 0)
             throw new InvalidOperationException("Payment amount must be positive");
@@ -39,7 +42,7 @@ public class Credit : BaseEntity
         if (amount > RemainingAmount)
             throw new InvalidOperationException("Payment exceeds remaining amount");
 
-        var payment = new CreditPayment(TenantId, Id, amount, notes);
+        var payment = new CreditPayment(TenantId, Id, storeId, amount, notes);
         Payments.Add(payment);
 
         RemainingAmount -= amount;

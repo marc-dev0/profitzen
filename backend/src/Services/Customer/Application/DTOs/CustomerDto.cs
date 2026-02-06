@@ -64,6 +64,7 @@ public record CreditDto(
 
 public record CreateCreditRequest(
     Guid CustomerId,
+    Guid StoreId,
     decimal Amount,
     DateTime? DueDate,
     string? Notes
@@ -76,8 +77,20 @@ public record CreditPaymentDto(
     string? Notes
 );
 
+public record CreditPaymentDetailDto(
+    Guid Id,
+    Guid CreditId,
+    Guid CustomerId,
+    string CustomerName,
+    Guid StoreId,
+    decimal Amount,
+    DateTime PaymentDate,
+    string? Notes
+);
+
 public record AddCreditPaymentRequest(
     decimal Amount,
+    Guid StoreId,
     string? Notes
 );
 

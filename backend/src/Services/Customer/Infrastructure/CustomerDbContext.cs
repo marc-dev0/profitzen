@@ -80,6 +80,7 @@ public class CustomerDbContext : DbContext
             entity.Property(e => e.Notes).HasMaxLength(500);
 
             entity.HasIndex(e => e.CreditId);
+            entity.HasIndex(e => e.StoreId);
             entity.HasIndex(e => e.PaymentDate);
         });
 

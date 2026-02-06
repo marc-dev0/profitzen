@@ -5,7 +5,7 @@ public abstract class BaseEntity : IAggregateRoot
     private readonly List<IDomainEvent> _domainEvents = new();
 
     public Guid Id { get; protected set; }
-    public DateTime CreatedAt { get; protected set; }
+    public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; protected set; }
     public DateTime? DeletedAt { get; protected set; }
     public bool IsDeleted => DeletedAt.HasValue;

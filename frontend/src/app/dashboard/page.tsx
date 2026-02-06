@@ -344,13 +344,21 @@ export default function DashboardPage() {
             </div>
             <span className="text-xs font-black text-muted-foreground uppercase tracking-widest">Utilidad Hoy</span>
           </div>
-          <p className="text-3xl font-black text-indigo-600">
+          <p className={`text-3xl font-black ${dashboardData.todayProfit < 0 ? 'text-red-500' : 'text-indigo-600'}`}>
             {formatCurrency(dashboardData.todayProfit || 0)}
           </p>
-          <p className="mt-4 text-[10px] font-bold text-muted-foreground uppercase flex items-center gap-2">
-            <Clock className="w-3 h-3" />
-            Margen: {dashboardData.todayRevenue > 0 ? ((dashboardData.todayProfit / dashboardData.todayRevenue) * 100).toFixed(1) : 0}%
-          </p>
+          <div className="mt-4 space-y-1">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase flex items-center gap-2">
+              <Clock className="w-3 h-3" />
+              Margen Neto: {dashboardData.todayRevenue > 0 ? ((dashboardData.todayProfit / dashboardData.todayRevenue) * 100).toFixed(1) : 0}%
+            </p>
+            {dashboardData.todayExpenses > 0 && (
+              <p className="text-[10px] font-bold text-red-500 uppercase flex items-center gap-2">
+                <ArrowDown className="w-3 h-3" />
+                Gastos: {formatCurrency(dashboardData.todayExpenses)}
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="bg-card border border-border rounded-3xl p-6 shadow-sm relative overflow-hidden group">

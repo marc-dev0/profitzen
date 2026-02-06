@@ -21,6 +21,7 @@ import { useRouter } from 'next/navigation';
 import { InventoryInsightReport, RiskAssessment, SuggestedPurchase, ProductPerformance } from '@/types/analytics';
 import { useSalesReport, useProductPerformance } from '@/hooks/useAnalytics';
 import { useAuthStore } from '@/store/authStore';
+import SalesPrediction from '@/components/analytics/SalesPrediction';
 
 export default function IntelligentAnalyzerPage() {
     const router = useRouter();
@@ -382,6 +383,11 @@ export default function IntelligentAnalyzerPage() {
                             </p>
                         </div>
                     </div>
+                </div>
+
+                {/* Sales Prediction Section (Python FastAPI Integration) */}
+                <div className="mt-12">
+                    <SalesPrediction dailyHistory={salesReport?.dailySummaries || []} />
                 </div>
 
                 <div className="mt-12 space-y-8">

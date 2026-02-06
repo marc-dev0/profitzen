@@ -40,3 +40,15 @@ PASOS_*.md
 
 # --- Specific Scripts (Optional, keep for dev ops) ---
 # Keeping deployment scripts is useful, but ignore temp ones if any.
+
+# --- Temporary & Generated ---
+*.txt
+TestResults/
+*.trx
+__pycache__/
+.pytest_cache/
+.venv/
+env/
+venv/
+.python-version
+

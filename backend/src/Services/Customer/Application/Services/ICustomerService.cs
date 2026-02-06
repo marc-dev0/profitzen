@@ -23,6 +23,7 @@ public interface ICustomerService
     Task RefundCreditAsync(Guid customerId, string reference, Guid userId);
     Task<IEnumerable<CreditDto>> GetOverdueCreditsAsync(string tenantId);
     Task<IEnumerable<CreditDto>> GetPendingCreditsAsync(string tenantId);
+    Task<IEnumerable<CreditPaymentDetailDto>> GetCreditPaymentsAsync(string tenantId, Guid? storeId = null, DateTime? fromDate = null, DateTime? toDate = null);
 
     Task<IEnumerable<CustomerDto>> GetTopCustomersAsync(string tenantId, int count = 10);
 }

@@ -10,6 +10,7 @@ public class DailySalesSummary : BaseEntity
     public int TotalSales { get; private set; }
     public decimal TotalRevenue { get; private set; }
     public decimal TotalCost { get; private set; }
+    public decimal TotalExpenses { get; private set; }
     public decimal TotalProfit { get; private set; }
     public decimal AverageTicket { get; private set; }
     public int TotalItems { get; private set; }
@@ -24,6 +25,7 @@ public class DailySalesSummary : BaseEntity
         int totalSales,
         decimal totalRevenue,
         decimal totalCost,
+        decimal totalExpenses,
         int totalItems,
         int totalCustomers)
     {
@@ -33,18 +35,20 @@ public class DailySalesSummary : BaseEntity
         TotalSales = totalSales;
         TotalRevenue = totalRevenue;
         TotalCost = totalCost;
-        TotalProfit = totalRevenue - totalCost;
+        TotalExpenses = totalExpenses;
+        TotalProfit = totalRevenue - totalCost - totalExpenses;
         AverageTicket = totalSales > 0 ? totalRevenue / totalSales : 0;
         TotalItems = totalItems;
         TotalCustomers = totalCustomers;
     }
 
-    public void Update(int totalSales, decimal totalRevenue, decimal totalCost, int totalItems, int totalCustomers)
+    public void Update(int totalSales, decimal totalRevenue, decimal totalCost, decimal totalExpenses, int totalItems, int totalCustomers)
     {
         TotalSales = totalSales;
         TotalRevenue = totalRevenue;
         TotalCost = totalCost;
-        TotalProfit = totalRevenue - totalCost;
+        TotalExpenses = totalExpenses;
+        TotalProfit = totalRevenue - totalCost - totalExpenses;
         AverageTicket = totalSales > 0 ? totalRevenue / totalSales : 0;
         TotalItems = totalItems;
         TotalCustomers = totalCustomers;

@@ -161,7 +161,35 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
         return [...items].sort((a, b) => a.sortOrder - b.sortOrder);
     }, [menuModules]);
 
-    const opsItems = menuModules?.filter(m => m.groupName === 'OPERACIONES') || [];
+    const opsItems = useMemo(() => {
+        let items = menuModules?.filter(m => m.groupName === 'OPERACIONES') || [];
+
+        if (!items.some(i => i.code === 'expenses')) {
+            items.push({
+                id: 'expenses-manual',
+                code: 'expenses',
+                name: 'Gastos',
+                route: '/expenses',
+                icon: 'CreditCard',
+                sortOrder: 20,
+                groupName: 'OPERACIONES',
+                children: []
+            });
+        }
+        if (!items.some(i => i.code === 'cash-control')) {
+            items.push({
+                id: 'cash-control-manual',
+                code: 'cash-control',
+                name: 'Control de Caja',
+                route: '/cash-control',
+                icon: 'Banknote',
+                sortOrder: 30,
+                groupName: 'OPERACIONES',
+                children: []
+            });
+        }
+        return [...items].sort((a, b) => a.sortOrder - b.sortOrder);
+    }, [menuModules]);
     const configItems = menuModules?.filter(m => m.groupName === 'CONFIGURACION') || [];
 
     const renderMenuItem = (module: SystemModule) => {
