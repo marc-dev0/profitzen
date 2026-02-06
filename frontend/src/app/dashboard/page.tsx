@@ -213,9 +213,10 @@ export default function DashboardPage() {
                 }
               }}
               disabled={recalculate.isPending}
-              className="px-8 py-4 bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-2xl font-black uppercase tracking-widest text-xs text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all shadow-sm hover:shadow-indigo-500/20 active:scale-95 disabled:opacity-50"
+              className="px-8 py-4 bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-2xl font-black uppercase tracking-widest text-xs text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all shadow-sm hover:shadow-indigo-500/20 active:scale-95 disabled:opacity-50 flex items-center gap-2"
             >
-              {recalculate.isPending ? 'Iniciando...' : 'Activar Vigilante'}
+              {recalculate.isPending && <RefreshCw className="w-4 h-4 animate-spin" />}
+              {recalculate.isPending ? 'Analizando...' : 'Activar Vigilante'}
             </button>
           </div>
         ) : summaries && summaries.length > 0 ? (
