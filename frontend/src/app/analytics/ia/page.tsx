@@ -155,18 +155,27 @@ export default function IntelligentAnalyzerPage() {
                         </div>
                         <p className="text-muted-foreground">Predicciones y recomendaciones estratégicas basadas en tus datos.</p>
                     </div>
-                    <button
-                        onClick={runFullAnalysis}
-                        disabled={analyzing}
-                        className="flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-700 to-indigo-700 text-white rounded-xl shadow-lg shadow-blue-900/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-70 disabled:grayscale font-medium"
-                    >
-                        {analyzing ? (
-                            <RefreshCw className="w-5 h-5 animate-spin" />
-                        ) : (
-                            <RefreshCw className="w-5 h-5" />
+                    <div className="flex flex-col items-end gap-2">
+                        <button
+                            onClick={runFullAnalysis}
+                            disabled={analyzing || insights?.quotaReached}
+                            className="flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-700 to-indigo-700 text-white rounded-xl shadow-lg shadow-blue-900/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-70 disabled:grayscale font-medium"
+                        >
+                            {analyzing ? (
+                                <RefreshCw className="w-5 h-5 animate-spin" />
+                            ) : insights?.quotaReached ? (
+                                <Clock className="w-5 h-5" />
+                            ) : (
+                                <RefreshCw className="w-5 h-5" />
+                            )}
+                            {analyzing ? 'Analizando...' : insights?.quotaReached ? 'Cuota Diaria Alcanzada' : 'Recalcular Inteligencia'}
+                        </button>
+                        {insights?.quotaReached && (
+                            <p className="text-[10px] text-muted-foreground font-medium animate-pulse">
+                                Por seguridad y costos, se permite 1 análisis profundo al día por empresa.
+                            </p>
                         )}
-                        {analyzing ? 'Analizando...' : 'Recalcular Inteligencia'}
-                    </button>
+                    </div>
                 </div>
 
                 {/* AI Summary Banner */}

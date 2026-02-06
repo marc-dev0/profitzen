@@ -148,5 +148,6 @@ public record InventoryInsightReportDto(
     List<ProductPerformanceDto> DeadStock,
     List<SuggestedPurchaseDto> PurchaseRecommendations,
     string AiSummary,
-    bool IsAiProcessing = false
+    bool IsAiProcessing = false,
+    bool QuotaReached = false
 );

@@ -115,6 +115,7 @@ export interface InventoryInsightReport {
   purchaseRecommendations: SuggestedPurchase[];
   aiSummary: string;
   isAiProcessing?: boolean;
+  quotaReached?: boolean;
 }
 
 export interface SmartSummary {

@@ -658,7 +658,19 @@ public class AnalyticsService : IAnalyticsService
             bool shouldGenerate = generateAi;
 
             // Try to fetch latest stored summary if we don't need to generate a new one
-            if (!shouldGenerate)
+            // NEW RULE: 1 use per day per company
+            var today = DateTime.UtcNow.Date;
+            var latestStoredToday = await _context.SmartSummaries
+                .Where(s => s.TenantId == tenantId && s.StoreId == storeId && s.Type == "InventoryInsight" && s.Date == today)
+                .OrderByDescending(s => s.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            if (latestStoredToday != null)
+            {
+                aiSummary = latestStoredToday.Content;
+                shouldGenerate = false;
+            }
+            else if (!shouldGenerate) // If not forcing, check for any previous summary regardless of date
             {
                 var latestStored = await _context.SmartSummaries
                     .Where(s => s.TenantId == tenantId && s.StoreId == storeId && s.Type == "InventoryInsight")
@@ -671,7 +683,6 @@ public class AnalyticsService : IAnalyticsService
                 }
                 else 
                 {
-                    // If none exists, we MUST generate it the first time even if generateAi is false
                     shouldGenerate = true;
                 }
             }
@@ -752,7 +763,8 @@ public class AnalyticsService : IAnalyticsService
                 deadStock,
                 suggestedPurchases.OrderByDescending(s => s.EstimatedCost).ToList(),
                 aiSummary,
-                isProcessing
+                isProcessing,
+                latestStoredToday != null
             );
         }
         finally
@@ -838,6 +850,18 @@ public class AnalyticsService : IAnalyticsService
         if (_processingTasks.ContainsKey(key)) return;
 
         _processingTasks.TryAdd(key, true);
+
+        // NEW RULE: 1 use per day per company
+        var today = DateTime.UtcNow.Date;
+        var exists = await _context.SmartSummaries
+            .AnyAsync(s => s.TenantId == tenantId && s.StoreId == storeId && s.Type == "InventoryInsight" && s.Date == today);
+            
+        if (exists) 
+        {
+            _logger.LogInformation("Inventory Insight already exists for today. Skipping background trigger.");
+            _processingTasks.TryRemove(key, out _);
+            return;
+        }
 
         // Start background work
         _ = Task.Run(async () =>
@@ -1128,8 +1152,18 @@ public class AnalyticsService : IAnalyticsService
     {
         try
         {
+            // NEW RULE: 1 use per day per company
+            var today = DateTime.UtcNow.Date;
+            var existingInsight = await _context.SmartSummaries
+                .AnyAsync(s => s.TenantId == tenantId && s.StoreId == storeId && s.Type == "DailyInsight" && s.Date == today);
+
+            if (existingInsight)
+            {
+                _logger.LogInformation("Vigilante Insight already exists for today. Skipping AI call.");
+                return;
+            }
+
             // Gather context data for the AI
-            var yesterday = DateTime.UtcNow.Date.AddDays(-1);
             var summary = await _context.DailySalesSummaries
                 .OrderByDescending(s => s.Date)
                 .FirstOrDefaultAsync(s => s.TenantId == tenantId && s.StoreId == storeId);
