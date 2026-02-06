@@ -289,14 +289,18 @@ export default function DashboardPage() {
                         toast.error('Error al iniciar actualización.', { id: t });
                       }
                     }}
-                    disabled={recalculate.isPending}
+                    disabled={recalculate.isPending || new Date(summaries[0].createdAt).toDateString() === new Date().toDateString()}
                     className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all border ${summaries[0].type === 'Error' || summaries[0].content.includes('⚠️') || summaries[0].content.includes('Error')
                       ? 'bg-red-500/20 hover:bg-red-500/40 text-red-300 border-red-500/30'
                       : 'bg-indigo-500/20 hover:bg-indigo-500/40 text-indigo-300 border-indigo-500/30'
-                      }`}
+                      } ${new Date(summaries[0].createdAt).toDateString() === new Date().toDateString() ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
-                    <RefreshCw className={`w-3.5 h-3.5 ${recalculate.isPending ? 'animate-spin' : ''}`} />
-                    {recalculate.isPending ? 'Iniciando...' : 'Reintentar Análisis'}
+                    {new Date(summaries[0].createdAt).toDateString() === new Date().toDateString() ? (
+                      <Clock className="w-3.5 h-3.5" />
+                    ) : (
+                      <RefreshCw className={`w-3.5 h-3.5 ${recalculate.isPending ? 'animate-spin' : ''}`} />
+                    )}
+                    {recalculate.isPending ? 'Iniciando...' : new Date(summaries[0].createdAt).toDateString() === new Date().toDateString() ? 'Análisis al día' : 'Reintentar Análisis'}
                   </button>
 
                   <button

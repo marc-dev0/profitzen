@@ -59,9 +59,11 @@ export default function IntelligentAnalyzerPage() {
             if (response.data.isAiProcessing) {
                 setAnalyzing(true);
                 setTimeout(() => fetchInsights(false), 5000);
-            } else if (analyzing) {
+            } else {
                 setAnalyzing(false);
-                toast.success('Análisis estratégico de IA completado');
+                if (analyzing) {
+                    toast.success('Análisis estratégico de IA completado');
+                }
             }
         } catch (error) {
             console.error('Error fetching insights:', error);
