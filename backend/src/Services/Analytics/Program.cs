@@ -55,15 +55,15 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddHttpClient();
 
-// AI - Semantic Kernel with local Ollama or Groq/OpenAI
-var aiUrl = builder.Configuration["AI:OllamaUrl"] ?? "http://localhost:11434";
-var aiModel = builder.Configuration["AI:Model"] ?? "llama3.2";
+// AI - Semantic Kernel with Groq (OpenAI Compatible)
+var aiUrl = builder.Configuration["AI:GroqUrl"] ?? "https://api.groq.com/openai/v1";
+var aiModel = builder.Configuration["AI:Model"] ?? "llama-3.3-70b-versatile";
 var aiApiKey = builder.Configuration["AI:ApiKey"];
 
 #pragma warning disable SKEXP0010, SKEXP0070
 if (!string.IsNullOrEmpty(aiApiKey))
 {
-    Log.Information("Registering Groq/OpenAI with Semantic Kernel. Model: {Model}", aiModel);
+    Log.Information("Registering Groq with Semantic Kernel. Model: {Model} at {Url}", aiModel, aiUrl);
     builder.Services.AddOpenAIChatCompletion(
         modelId: aiModel,
         apiKey: aiApiKey,
@@ -72,38 +72,23 @@ if (!string.IsNullOrEmpty(aiApiKey))
 }
 else
 {
-    Log.Information("Registering local Ollama with Semantic Kernel at {Url}. Model: {Model}", aiUrl, aiModel);
-    builder.Services.AddOllamaChatCompletion(
-        modelId: aiModel,
-        endpoint: new Uri(aiUrl)
-    );
+    Log.Warning("AI ApiKey is missing. AI features will be disabled or fail.");
 }
 #pragma warning restore SKEXP0010, SKEXP0070
 
-// Still register IChatClient for other parts of the system if needed
+// IChatClient for other components
 builder.Services.AddSingleton<Microsoft.Extensions.AI.IChatClient>(sp =>
 {
-    if (!string.IsNullOrEmpty(aiApiKey))
+    if (string.IsNullOrEmpty(aiApiKey))
     {
-        return new OpenAI.Chat.ChatClient(aiModel, new System.ClientModel.ApiKeyCredential(aiApiKey), new OpenAI.OpenAIClientOptions 
-        { 
-            Endpoint = new Uri(aiUrl) 
-        })
-        .AsChatClient();
+        return Microsoft.Extensions.AI.ChatClient.Create(new()); // Null client effectively
     }
-    else
-    {
-        var httpClient = new HttpClient
-        {
-            BaseAddress = new Uri(aiUrl),
-            Timeout = TimeSpan.FromMinutes(10)
-        };
-        
-        return new OllamaSharp.OllamaApiClient(httpClient)
-        {
-            SelectedModel = aiModel
-        };
-    }
+
+    return new OpenAI.Chat.ChatClient(aiModel, new System.ClientModel.ApiKeyCredential(aiApiKey), new OpenAI.OpenAIClientOptions 
+    { 
+        Endpoint = new Uri(aiUrl) 
+    })
+    .AsChatClient();
 });
 
 builder.Services.AddKernel();

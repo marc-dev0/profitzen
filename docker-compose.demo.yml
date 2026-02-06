@@ -146,10 +146,9 @@ services:
       - ConnectionStrings__DefaultConnection=Host=postgres-demo;Database=profitzen_demo;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
       - Services__ApiKey=${SERVICE_KEY}
       - Serilog__WriteTo__2__Args__serverUrl=http://seq-demo:5341
-      - AI__OllamaUrl=http://host.docker.internal:11434
-      - AI:Model=llama3.2
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - AI__ApiKey=${AI_API_KEY}
+      - AI__Model=llama-3.3-70b-versatile
+      - AI__GroqUrl=https://api.groq.com/openai/v1
     depends_on:
       - postgres-demo
     networks:
@@ -180,22 +179,6 @@ services:
     networks:
       - profitzen-demo-network
 
-  #   ollama-demo:
-  #     image: ollama/ollama:latest
-  #     restart: always
-  #     volumes:
-  #       - ollama_demo_data:/root/.ollama
-  #     networks:
-  #       - profitzen-demo-network
-  #
-  #   ollama-pull-model-demo:
-  #     image: curlimages/curl
-  #     depends_on:
-  #       - ollama-demo
-  #     networks:
-  #       - profitzen-demo-network
-  #     command: >
-  #       sh -c "sleep 10 && curl -X POST http://ollama-demo:11434/api/pull -d '{\"name\": \"llama3.2\"}'"
 
   seq-demo:
     image: datalust/seq:latest
@@ -214,7 +197,6 @@ services:
 volumes:
   postgres_demo_data:
   redis_demo_data:
-  ollama_demo_data:
   seq_demo_data:
 
 

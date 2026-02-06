@@ -149,9 +149,9 @@ services:
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=profitzen;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
       - Services__ApiKey=${SERVICE_KEY}
       - Serilog__WriteTo__2__Args__serverUrl=http://seq:5341
-      - AI__OllamaUrl=${AI__OllamaUrl:-http://localhost:11434}
-      - AI__Model=${AI__Model:-llama3.2}
-      - AI__ApiKey=${AI__ApiKey}
+      - AI__ApiKey=${AI_API_KEY}
+      - AI__Model=${AI__Model:-llama-3.3-70b-versatile}
+      - AI__GroqUrl=${AI__GroqUrl:-https://api.groq.com/openai/v1}
     depends_on:
       - postgres
     networks:
@@ -185,23 +185,6 @@ services:
     networks:
       - profitzen-prod-network
 
-  #   ollama:
-  #     image: ollama/ollama:latest
-  #     restart: always
-  #     volumes:
-  #       - ollama_prod_data:/root/.ollama
-  #     networks:
-  #       - profitzen-prod-network
-  #
-  #   ollama-pull-model:
-  #     image: curlimages/curl
-  #     depends_on:
-  #       - ollama
-  #     networks:
-  #       - profitzen-prod-network
-  #     command: >
-  #       sh -c "sleep 10 && curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"llama3.2\"}'"
-
   seq:
     image: datalust/seq:latest
     restart: always
@@ -216,7 +199,6 @@ services:
 volumes:
   postgres_prod_data:
   redis_prod_data:
-  ollama_prod_data:
   seq_prod_data:
 
 
