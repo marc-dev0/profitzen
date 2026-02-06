@@ -5,7 +5,6 @@ using Profitzen.Analytics.Application.Services;
 using Profitzen.Analytics.Infrastructure;
 using Profitzen.Common.Extensions;
 using Microsoft.SemanticKernel;
-using Microsoft.Extensions.AI;
 using System.Text;
 using Serilog;
 
@@ -76,20 +75,6 @@ else
 }
 #pragma warning restore SKEXP0010, SKEXP0070
 
-// IChatClient for other components
-builder.Services.AddSingleton<Microsoft.Extensions.AI.IChatClient>(sp =>
-{
-    if (string.IsNullOrEmpty(aiApiKey))
-    {
-        return Microsoft.Extensions.AI.ChatClient.Create(new()); // Null client effectively
-    }
-
-    return new OpenAI.Chat.ChatClient(aiModel, new System.ClientModel.ApiKeyCredential(aiApiKey), new OpenAI.OpenAIClientOptions 
-    { 
-        Endpoint = new Uri(aiUrl) 
-    })
-    .AsChatClient();
-});
 
 builder.Services.AddKernel();
 
