@@ -288,7 +288,6 @@ export default function AnalyticsPage() {
                         <Download className="w-5 h-5" />
                         Exportar PDF
                     </button>
-                    {/* 
                     <button
                         onClick={() => router.push('/analytics/ia')}
                         className="p-3 bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-700 bg-size-200 animate-gradient-x text-white rounded-xl hover:shadow-lg hover:shadow-indigo-500/30 transition-all font-bold flex items-center gap-2 border border-white/10"
@@ -297,7 +296,6 @@ export default function AnalyticsPage() {
                         Analizador IA
                         <Sparkles className="w-4 h-4 text-yellow-300 animate-pulse" />
                     </button>
-                    */}
                 </div>
             </div>
 

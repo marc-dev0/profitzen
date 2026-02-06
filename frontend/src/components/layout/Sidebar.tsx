@@ -140,8 +140,8 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
     const intelItems = useMemo(() => {
         let items = menuModules?.filter(m => m.groupName === 'INTELIGENCIA') || [];
 
-        // Hide AI items for now
-        items = items.filter(i => i.code !== 'analytics_ia' && i.code !== 'analytics_ia_history');
+        // Hide AI items for now - RESTORED
+        // items = items.filter(i => i.code !== 'analytics_ia' && i.code !== 'analytics_ia_history');
 
         // Ensure Reportes is present if user has analytics permissions
         if (!items.some(i => i.code === 'reports')) {
