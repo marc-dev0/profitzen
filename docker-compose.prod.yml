@@ -168,9 +168,6 @@ services:
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=profitzen;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
       - ConnectionStrings__Redis=redis:6379
       - Services__ApiKey=${SERVICE_KEY}
-      - JWT_SECRET=${JWT_SECRET}
-      - JWT_ISSUER=Profitzen.Identity
-      - JWT_AUDIENCE=Profitzen.Api
       - Serilog__WriteTo__2__Args__serverUrl=http://seq:5341
     depends_on:
       - postgres
