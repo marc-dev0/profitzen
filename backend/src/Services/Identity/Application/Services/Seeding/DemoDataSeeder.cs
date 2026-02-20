@@ -295,16 +295,18 @@ public class DemoDataSeeder : IDemoDataSeeder
         {
             // Admin (1) - Everything
             (UserRole.Admin, "dashboard"), (UserRole.Admin, "pos"), (UserRole.Admin, "stores"),
-            (UserRole.Admin, "sales"), (UserRole.Admin, "customers"),
-            (UserRole.Admin, "analytics"), (UserRole.Admin, "analytics_ia"), (UserRole.Admin, "analytics_ia_history"),
-            (UserRole.Admin, "products"), (UserRole.Admin, "inventory"), (UserRole.Admin, "purchases"), (UserRole.Admin, "suppliers"),
+            (UserRole.Admin, "sales"), (UserRole.Admin, "customers"), (UserRole.Admin, "collections"),
+            (UserRole.Admin, "analytics"), (UserRole.Admin, "analytics_ia"), (UserRole.Admin, "analytics_ia_history"), (UserRole.Admin, "reports"),
+            (UserRole.Admin, "products"), (UserRole.Admin, "inventory"), 
+            (UserRole.Admin, "purchases"), (UserRole.Admin, "suppliers"), (UserRole.Admin, "expenses"), (UserRole.Admin, "cash-control"),
             (UserRole.Admin, "settings"), (UserRole.Admin, "users"), (UserRole.Admin, "hardware"),
 
             // Manager (2)
             (UserRole.Manager, "dashboard"), (UserRole.Manager, "pos"), (UserRole.Manager, "stores"),
-            (UserRole.Manager, "sales"), (UserRole.Manager, "customers"),
-            (UserRole.Manager, "analytics"), (UserRole.Manager, "analytics_ia"), (UserRole.Manager, "analytics_ia_history"),
-            (UserRole.Manager, "products"), (UserRole.Manager, "inventory"), (UserRole.Manager, "purchases"), (UserRole.Manager, "suppliers"),
+            (UserRole.Manager, "sales"), (UserRole.Manager, "customers"), (UserRole.Manager, "collections"),
+            (UserRole.Manager, "analytics"), (UserRole.Manager, "analytics_ia"), (UserRole.Manager, "analytics_ia_history"), (UserRole.Manager, "reports"),
+            (UserRole.Manager, "products"), (UserRole.Manager, "inventory"), 
+            (UserRole.Manager, "purchases"), (UserRole.Manager, "suppliers"), (UserRole.Manager, "expenses"), (UserRole.Manager, "cash-control"),
             (UserRole.Manager, "settings"), (UserRole.Manager, "hardware"),
 
             // Cashier (4)
@@ -333,55 +335,73 @@ public class DemoDataSeeder : IDemoDataSeeder
         
         var modulesData = new List<(string Code, string Name, string Route, string Icon, string Group, int Order)>
         {
-            // PRINCIPAL
-            ("dashboard", "Dashboard", "/dashboard", "LayoutDashboard", "PRINCIPAL", 1),
-            ("pos", "Punto de Venta", "/pos", "ShoppingCart", "PRINCIPAL", 2),
-            ("stores", "Sucursales", "/stores", "Store", "PRINCIPAL", 3),
+            // INICIO
+            ("dashboard", "Dashboard", "/dashboard", "LayoutDashboard", "INICIO", 1),
             
             // VENTAS
-            ("sales", "Historial de Ventas", "/sales", "FileText", "VENTAS", 1),
-            ("customers", "Clientes", "/customers", "Users", "VENTAS", 2),
+            ("pos", "Punto de Venta", "/pos", "ShoppingCart", "VENTAS", 1),
+            ("sales", "Historial de Ventas", "/sales", "FileText", "VENTAS", 2),
+            ("customers", "Clientes", "/customers", "Users", "VENTAS", 3),
+            ("collections", "Cuentas por Cobrar", "/collections", "Banknote", "VENTAS", 4),
             
-            // INTELIGENCIA
-            ("analytics", "Centro Analítico", "/analytics", "BarChart3", "INTELIGENCIA", 1),
-            ("analytics_ia", "Analizador IA", "/analytics/ia", "BrainCircuit", "INTELIGENCIA", 2),
-            ("analytics_ia_history", "Bitácora de IA", "/analytics/ia/vigilante/history", "Clock", "INTELIGENCIA", 3),
+            // INVENTARIO
+            ("products", "Catálogo de Productos", "/products", "Tags", "INVENTARIO", 1),
+            ("inventory", "Control de Stock", "/inventory", "Package", "INVENTARIO", 2),
+
+            // FINANZAS Y COMPRAS
+            ("purchases", "Gestión de Compras", "/purchases", "CreditCard", "FINANZAS Y COMPRAS", 1),
+            ("suppliers", "Proveedores", "/suppliers", "Truck", "FINANZAS Y COMPRAS", 2),
+            ("expenses", "Gastos", "/expenses", "CreditCard", "FINANZAS Y COMPRAS", 3),
+            ("cash-control", "Control de Caja", "/cash-control", "Banknote", "FINANZAS Y COMPRAS", 4),
             
-            // OPERACIONES
-            ("products", "Catálogo de Productos", "/products", "Tags", "OPERACIONES", 1),
-            ("inventory", "Control de Stock", "/inventory", "Package", "OPERACIONES", 2),
-            ("purchases", "Gestión de Compras", "/purchases", "CreditCard", "OPERACIONES", 3),
-            ("suppliers", "Proveedores", "/suppliers", "Truck", "OPERACIONES", 4),
+            // REPORTES E IA
+            ("reports", "Reporte de Ventas", "/reports", "FileText", "REPORTES E IA", 1),
+            ("analytics", "Centro Analítico", "/analytics", "BarChart3", "REPORTES E IA", 2),
+            ("analytics_ia", "Analizador IA", "/analytics/ia", "BrainCircuit", "REPORTES E IA", 3),
+            ("analytics_ia_history", "Bitácora de IA", "/analytics/ia/vigilante/history", "Clock", "REPORTES E IA", 4),
             
-            // CONFIGURACION
-            ("settings", "Mi Empresa", "/settings", "Store", "CONFIGURACION", 1),
-            ("users", "Usuarios y Roles", "/users", "UserCog", "CONFIGURACION", 2),
-            ("hardware", "Hardware y Periféricos", "/settings/hardware", "Monitor", "CONFIGURACION", 3)
+            // CATÁLOGOS Y AJUSTES
+            ("stores", "Sucursales", "/stores", "Store", "CATALOGOS Y AJUSTES", 1),
+            ("settings", "Mi Empresa", "/settings", "Store", "CATALOGOS Y AJUSTES", 2),
+            ("users", "Usuarios y Roles", "/users", "UserCog", "CATALOGOS Y AJUSTES", 3),
+            ("hardware", "Hardware y Periféricos", "/settings/hardware", "Monitor", "CATALOGOS Y AJUSTES", 4)
         };
 
         foreach (var mData in modulesData)
+    {
+        var existingModule = await _context.AppModules.FirstOrDefaultAsync(m => m.Code == mData.Code);
+        
+        if (existingModule == null)
         {
-            var exists = await _context.AppModules.AnyAsync(m => m.Code == mData.Code);
-            if (!exists)
+            _context.AppModules.Add(new AppModule
             {
-                _context.AppModules.Add(new AppModule
-                {
-                    Id = Guid.NewGuid(),
-                    Code = mData.Code,
-                    Name = mData.Name,
-                    Route = mData.Route,
-                    Icon = mData.Icon,
-                    GroupName = mData.Group,
-                    SortOrder = mData.Order,
-                    CreatedAt = DateTime.UtcNow,
-                    IsActive = true,
-                    IsVisibleInMenu = true
-                });
-                _logger.LogInformation("Module {Code} added to database.", mData.Code);
-            }
+                Id = Guid.NewGuid(),
+                Code = mData.Code,
+                Name = mData.Name,
+                Route = mData.Route,
+                Icon = mData.Icon,
+                GroupName = mData.Group,
+                SortOrder = mData.Order,
+                CreatedAt = DateTime.UtcNow,
+                IsActive = true,
+                IsVisibleInMenu = true
+            });
+            _logger.LogInformation("Module {Code} added to database.", mData.Code);
         }
+        else
+        {
+            // Always ensure the grouping and details are up to date with the seeder
+            existingModule.GroupName = mData.Group;
+            existingModule.Name = mData.Name;
+            existingModule.Route = mData.Route;
+            existingModule.Icon = mData.Icon;
+            existingModule.SortOrder = mData.Order;
+            
+            _context.AppModules.Update(existingModule);
+        }
+    }
 
-        await _context.SaveChangesAsync();
+    await _context.SaveChangesAsync();
 
         // Also ensure permissions for Admin and Manager are present
         var rolesToSeed = new[] { UserRole.Admin, UserRole.Manager };

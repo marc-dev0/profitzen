@@ -32,6 +32,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     const router = useRouter();
     const { user, logout: authLogout, setCurrentStore, setRolePermissions } = useAuthStore();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [isDesktopExpanded, setIsDesktopExpanded] = useState(true);
     const [isStoreMenuOpen, setIsStoreMenuOpen] = useState(false);
     const [isPermissionsOpen, setIsPermissionsOpen] = useState(false);
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -54,10 +55,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
             {/* Sidebar Component */}
-            <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+            <Sidebar
+                isOpen={isSidebarOpen}
+                onClose={() => setIsSidebarOpen(false)}
+                isDesktopExpanded={isDesktopExpanded}
+                onToggleDesktop={() => setIsDesktopExpanded(!isDesktopExpanded)}
+            />
 
             {/* Top Header */}
-            <header className="fixed top-0 right-0 left-0 z-30 h-16 bg-white dark:bg-card border-b border-border transition-all duration-300 lg:left-64">
+            <header className={`fixed top-0 right-0 left-0 z-30 h-16 bg-white dark:bg-card border-b border-border transition-all duration-300 ${isDesktopExpanded ? 'lg:left-64' : 'lg:left-20'}`}>
                 <div className="flex h-full items-center justify-between px-4 sm:px-6 lg:px-8">
                     {/* Left side: Toggle & Title (Optional) */}
                     <div className="flex items-center gap-4">
@@ -181,7 +187,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </header>
 
             {/* Main Content Area */}
-            <div className="pt-16 lg:pl-64 transition-all duration-300">
+            <div className={`pt-16 transition-all duration-300 ${isDesktopExpanded ? 'lg:pl-64' : 'lg:pl-20'}`}>
                 <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
                     {children}
                 </main>
