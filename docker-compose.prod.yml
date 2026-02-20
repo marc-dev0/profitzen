@@ -157,6 +157,22 @@ services:
     networks:
       - profitzen-prod-network
 
+  payment-methods-service:
+    build:
+      context: ./backend
+      dockerfile: src/Services/PaymentMethods/Dockerfile
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=profitzen;Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
+      - Services__ApiKey=${SERVICE_KEY}
+      - Serilog__WriteTo__2__Args__serverUrl=http://seq:5341
+    depends_on:
+      - postgres
+    networks:
+      - profitzen-prod-network
+
   frontend:
     build:
       context: ./frontend
