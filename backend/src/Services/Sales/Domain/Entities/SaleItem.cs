@@ -9,7 +9,7 @@ public class SaleItem : BaseEntity
     public Guid ProductId { get; private set; }
     public string ProductName { get; private set; } = string.Empty;
     public string ProductCode { get; private set; } = string.Empty;
-    public int Quantity { get; private set; }
+    public decimal Quantity { get; private set; }
     public decimal UnitPrice { get; private set; }
     public decimal DiscountAmount { get; private set; }
     public decimal Subtotal { get; private set; }
@@ -22,7 +22,7 @@ public class SaleItem : BaseEntity
     private SaleItem() { }
 
     public SaleItem(string tenantId, Guid saleId, Guid productId, string productName, string productCode,
-                   int quantity, decimal unitPrice, decimal discountAmount = 0, decimal conversionToBase = 1,
+                   decimal quantity, decimal unitPrice, decimal discountAmount = 0, decimal conversionToBase = 1,
                    Guid? uomId = null, string? uomCode = null)
     {
         TenantId = tenantId;
@@ -40,7 +40,7 @@ public class SaleItem : BaseEntity
     }
 
     internal SaleItem(string tenantId, Guid productId, string productName, string productCode,
-                     int quantity, decimal unitPrice, decimal discountAmount = 0, decimal conversionToBase = 1,
+                     decimal quantity, decimal unitPrice, decimal discountAmount = 0, decimal conversionToBase = 1,
                      Guid? uomId = null, string? uomCode = null)
     {
         TenantId = tenantId;
@@ -56,7 +56,7 @@ public class SaleItem : BaseEntity
         CalculateSubtotal();
     }
 
-    public void UpdateQuantity(int newQuantity)
+    public void UpdateQuantity(decimal newQuantity)
     {
         if (newQuantity <= 0)
             throw new ArgumentException("Quantity must be positive");
@@ -73,6 +73,10 @@ public class SaleItem : BaseEntity
 
     private void CalculateSubtotal()
     {
-        Subtotal = (UnitPrice * Quantity) - DiscountAmount;
+        // Round to 2 decimal places using banker's rounding (ToEven) to match JavaScript's Math.round()
+        // This ensures consistency between POS display and backend storage
+        // Example: 1.225 rounds to 1.22 (not 1.23)
+        var rawSubtotal = (UnitPrice * Quantity) - DiscountAmount;
+        Subtotal = Math.Round(rawSubtotal, 2, MidpointRounding.ToEven);
     }
 }

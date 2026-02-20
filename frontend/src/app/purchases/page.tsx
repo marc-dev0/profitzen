@@ -104,6 +104,7 @@ export default function PurchasesPage() {
     unitPrice: 0,
     bonusQuantity: 0,
     bonusUOMId: '',
+    expirationDate: '',
   });
   const [selectedProducts, setSelectedProducts] = useState<Map<string, ProductSearchResult>>(new Map());
   const [selectedPurchase, setSelectedPurchase] = useState<any>(null);
@@ -312,6 +313,7 @@ export default function PurchasesPage() {
       unitPrice: product.purchasePrice,
       bonusQuantity: 0,
       bonusUOMId: '',
+      expirationDate: '',
     });
   };
 
@@ -334,8 +336,8 @@ export default function PurchasesPage() {
       return;
     }
 
-    if (currentDetail.unitPrice <= 0) {
-      toast.error('El precio unitario debe ser mayor a 0');
+    if (currentDetail.unitPrice < 0) {
+      toast.error('El precio unitario no puede ser negativo');
       setTimeout(() => unitPriceInputRef.current?.focus(), 100);
       return;
     }
@@ -345,14 +347,23 @@ export default function PurchasesPage() {
       return;
     }
 
+    const product = selectedProducts.get(currentDetail.productId);
+    if (product?.hasExpiration && !currentDetail.expirationDate) {
+      toast.error('Este producto requiere fecha de vencimiento');
+      // focus logic could go here
+      return;
+    }
+
     setDetails([...details, {
       productId: currentDetail.productId,
       uomId: currentDetail.uomId,
       quantity: currentDetail.quantity,
       unitPrice: currentDetail.unitPrice,
       bonusQuantity: currentDetail.bonusQuantity > 0 ? currentDetail.bonusQuantity : undefined,
-      bonusUOMId: currentDetail.bonusQuantity > 0 ? currentDetail.bonusUOMId : undefined
+      bonusUOMId: currentDetail.bonusQuantity > 0 ? currentDetail.bonusUOMId : undefined,
+      expirationDate: currentDetail.expirationDate ? toNoonISO(currentDetail.expirationDate) : undefined
     }]);
+
     setCurrentDetail({
       productId: '',
       productName: '',
@@ -360,7 +371,8 @@ export default function PurchasesPage() {
       quantity: 1,
       unitPrice: 0,
       bonusQuantity: 0,
-      bonusUOMId: ''
+      bonusUOMId: '',
+      expirationDate: ''
     });
 
     setTimeout(() => productAutocompleteRef.current?.focus(), 0);
@@ -683,6 +695,16 @@ export default function PurchasesPage() {
                     </select>
                   </div>
 
+                  {selectedProducts.get(currentDetail.productId)?.hasExpiration && (
+                    <div className="space-y-2">
+                      <Label htmlFor="expirationDate">Vencimiento *</Label>
+                      <FormattedDateInput
+                        value={currentDetail.expirationDate || ''}
+                        onChange={(val) => setCurrentDetail({ ...currentDetail, expirationDate: val })}
+                      />
+                    </div>
+                  )}
+
                   <div className="space-y-2">
                     <Label htmlFor="quantity">Cantidad *</Label>
                     <NumberInput
@@ -785,6 +807,7 @@ export default function PurchasesPage() {
                         <tr>
                           <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Producto</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">UOM</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Venc.</th>
                           <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Cant.</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Bono</th>
                           <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">P. Unit.</th>
@@ -799,6 +822,7 @@ export default function PurchasesPage() {
                             <tr key={index} className="hover:bg-muted/50">
                               <td className="px-4 py-3 text-sm text-foreground">{product?.name || 'Producto'}</td>
                               <td className="px-4 py-3 text-sm text-muted-foreground">{getUOMName(detail.uomId)}</td>
+                              <td className="px-4 py-3 text-sm text-muted-foreground">{detail.expirationDate ? formatDate(detail.expirationDate) : '-'}</td>
                               <td className="px-4 py-3 text-sm text-foreground text-right">{detail.quantity}</td>
                               <td className="px-4 py-3 text-sm text-muted-foreground">
                                 {detail.bonusQuantity && detail.bonusQuantity > 0
@@ -822,7 +846,7 @@ export default function PurchasesPage() {
                           );
                         })}
                         <tr className="bg-muted">
-                          <td colSpan={5} className="px-4 py-4 text-right text-sm font-bold text-foreground">
+                          <td colSpan={6} className="px-4 py-4 text-right text-sm font-bold text-foreground">
                             Total:
                           </td>
                           <td className="px-4 py-4 text-right text-lg font-bold text-foreground">
@@ -1079,6 +1103,7 @@ export default function PurchasesPage() {
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Producto</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Unidad</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Venc.</th>
                         <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Cantidad</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Bono</th>
                         <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">P. Unit.</th>
@@ -1092,6 +1117,7 @@ export default function PurchasesPage() {
                           <td className="px-4 py-3 text-sm text-muted-foreground">
                             {detail.uomCode ? `${detail.uomCode} - ${detail.uomName}` : (detail.uomName || '-')}
                           </td>
+                          <td className="px-4 py-3 text-sm text-muted-foreground">{detail.expirationDate ? formatDate(detail.expirationDate) : '-'}</td>
                           <td className="px-4 py-3 text-sm text-right font-mono">{detail.quantity}</td>
                           <td className="px-4 py-3 text-sm text-muted-foreground">
                             {detail.bonusQuantity && detail.bonusQuantity > 0
@@ -1107,7 +1133,7 @@ export default function PurchasesPage() {
                     </tbody>
                     <tfoot className="bg-muted/30 border-t-2 border-border">
                       <tr>
-                        <td colSpan={5} className="px-4 py-3 text-sm font-bold text-foreground text-right uppercase tracking-wider">
+                        <td colSpan={6} className="px-4 py-3 text-sm font-bold text-foreground text-right uppercase tracking-wider">
                           Total General:
                         </td>
                         <td className="px-4 py-3 text-base font-bold text-primary text-right font-mono">

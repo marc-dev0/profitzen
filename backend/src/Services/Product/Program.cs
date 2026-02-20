@@ -57,7 +57,7 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-builder.Services.AddSingleton<IMasterDataCacheService, MasterDataCacheService>();
+builder.Services.AddScoped<IMasterDataCacheService, MasterDataCacheService>();
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<IDataEnrichmentService, DataEnrichmentService>();
 builder.Services.AddScoped<IPriceListService, PriceListService>();

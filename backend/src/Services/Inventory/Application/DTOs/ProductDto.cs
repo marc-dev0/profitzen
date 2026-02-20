@@ -42,36 +42,37 @@ public record StoreInventoryDto(
     string ProductName,
     string? CategoryName,
     Guid StoreId,
-    int CurrentStock,
-    int MinimumStock,
+    decimal CurrentStock,
+    decimal MinimumStock,
     bool IsLowStock,
     DateTime CreatedAt,
     string? Barcode = null,
     string? ShortScanCode = null,
     decimal UnitCost = 0,
     decimal PurchasePrice = 0,
-    string? PurchaseUOMName = null
+    string? PurchaseUOMName = null,
+    string? BaseUOMCode = null
 );
 
 public record CreateStoreInventoryRequest(
     Guid ProductId,
-    int MinimumStock
+    decimal MinimumStock
 );
 
 public record UpdateStockRequest(
-    int NewStock,
+    decimal NewStock,
     string Reason
 );
 
 public record StockMovementRequest(
-    int Quantity,
+    decimal Quantity,
     string Reason,
     Guid? UOMId = null,
     string? UOMCode = null,
-    int? OriginalQuantity = null,
-    int? ConversionFactor = null
+    decimal? OriginalQuantity = null,
+    decimal? ConversionFactor = null
 );
 
 public record UpdateMinimumStockRequest(
-    int MinimumStock
+    decimal MinimumStock
 );

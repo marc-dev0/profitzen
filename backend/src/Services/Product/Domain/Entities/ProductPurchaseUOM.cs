@@ -8,6 +8,7 @@ public class ProductPurchaseUOM : BaseEntity
     public Guid UOMId { get; private set; }
     public decimal ConversionToBase { get; private set; }
     public bool IsDefault { get; private set; }
+    public int SortOrder { get; private set; }
     public bool IsActive { get; private set; }
 
     public Product Product { get; private set; } = null!;
@@ -18,7 +19,8 @@ public class ProductPurchaseUOM : BaseEntity
         Guid productId,
         Guid uomId,
         decimal conversionToBase,
-        bool isDefault = false)
+        bool isDefault = false,
+        int sortOrder = 0)
     {
         if (conversionToBase <= 0)
             throw new ArgumentException("Conversion to base must be greater than zero", nameof(conversionToBase));
@@ -27,6 +29,7 @@ public class ProductPurchaseUOM : BaseEntity
         UOMId = uomId;
         ConversionToBase = conversionToBase;
         IsDefault = isDefault;
+        SortOrder = sortOrder;
         IsActive = true;
     }
 

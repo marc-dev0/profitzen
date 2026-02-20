@@ -97,7 +97,7 @@ public class InventoryService : IInventoryService
         return null;
     }
 
-    private record ProductInfo(string Code, string Name, string? CategoryName, decimal PurchasePrice = 0, string? Barcode = null, string? ShortScanCode = null, List<ProductPurchaseUOMInfo>? PurchaseUOMs = null, List<ProductSaleUOMInfo>? SaleUOMs = null);
+    private record ProductInfo(string Code, string Name, string? CategoryName, decimal PurchasePrice = 0, string? Barcode = null, string? ShortScanCode = null, List<ProductPurchaseUOMInfo>? PurchaseUOMs = null, List<ProductSaleUOMInfo>? SaleUOMs = null, bool HasExpiration = false, string? BaseUOMCode = null, bool AllowFractional = false);
 
     private record ProductFullInfo(
         Guid Id,
@@ -111,7 +111,9 @@ public class InventoryService : IInventoryService
         string? BaseUOMName,
         List<ProductPurchaseUOMInfo>? PurchaseUOMs,
         List<ProductSaleUOMInfo>? SaleUOMs,
-        bool IsActive = true
+        bool IsActive = true,
+        bool HasExpiration = false,
+        bool AllowFractional = false
     );
 
     private class InternalProductResponse
@@ -123,11 +125,14 @@ public class InventoryService : IInventoryService
         public decimal PurchasePrice { get; set; }
         public decimal SalePrice { get; set; }
         public bool IsActive { get; set; }
+        public bool HasExpiration { get; set; }
+        public bool AllowFractional { get; set; }
         public string? Barcode { get; set; }
         public string? ShortScanCode { get; set; }
         public decimal? UnitCost { get; set; }
         public string? PurchaseUOMCode { get; set; }
         public string? PurchaseUOMName { get; set; }
+        public string? BaseUOMCode { get; set; }
         public List<ProductPurchaseUOMInfo>? PurchaseUOMs { get; set; }
         public List<ProductSaleUOMInfo>? SaleUOMs { get; set; }
     }
@@ -149,6 +154,7 @@ public class InventoryService : IInventoryService
         public decimal ConversionToBase { get; set; }
         public bool IsDefault { get; set; }
         public decimal Price { get; set; }
+        public string? Barcode { get; set; }
         public List<ProductPriceInfo>? Prices { get; set; }
     }
 
@@ -170,14 +176,25 @@ public class InventoryService : IInventoryService
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
-                var uomData = JsonSerializer.Deserialize<UOMResponse>(json, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
-                if (uomData != null)
-                {
-                    return (uomData.Code, uomData.Name);
-                }
+                _logger.LogDebug("UOM Detail Response for {UOMId}: {Json}", uomId, json);
+                
+                using var document = JsonDocument.Parse(json);
+                var root = document.RootElement;
+                
+                string code = root.TryGetProperty("code", out var codeProp) ? codeProp.GetString() ?? "UND" : "UND";
+                
+                // Try multiple name properties (name, value, description)
+                string name = "Unidad";
+                if (root.TryGetProperty("name", out var nameProp) && !string.IsNullOrEmpty(nameProp.GetString()))
+                    name = nameProp.GetString()!;
+                else if (root.TryGetProperty("value", out var valueProp) && !string.IsNullOrEmpty(valueProp.GetString()))
+                    name = valueProp.GetString()!;
+                else if (root.TryGetProperty("description", out var descProp) && !string.IsNullOrEmpty(descProp.GetString()))
+                    name = descProp.GetString()!;
+                else if (root.TryGetProperty("code", out var cProp) && !string.IsNullOrEmpty(cProp.GetString()))
+                    name = cProp.GetString()!;
+
+                return (code, name);
             }
         }
         catch (Exception ex)
@@ -187,7 +204,7 @@ public class InventoryService : IInventoryService
         return null;
     }
 
-    private record UOMResponse(Guid Id, string Code, string Name);
+    private record UOMResponse(Guid Id, string Code, string Name, string? Value, string? Description);
 
 
     public async Task<IEnumerable<StoreInventoryDto>> GetLowStockProductsAsync(Guid storeId, string? token = null)
@@ -235,7 +252,8 @@ public class InventoryService : IInventoryService
                         product?.ShortScanCode,
                         product?.UnitCost ?? 0,
                         product?.PurchasePrice ?? 0,
-                        product?.PurchaseUOMName
+                        product?.PurchaseUOMName,
+                        product?.BaseUOMCode
                     );
                 }).ToList();
             }
@@ -297,7 +315,8 @@ public class InventoryService : IInventoryService
                         product?.ShortScanCode,
                         product?.UnitCost ?? 0,
                         product?.PurchasePrice ?? 0,
-                        product?.PurchaseUOMName
+                        product?.PurchaseUOMName,
+                        product?.BaseUOMCode
                     );
                 }).ToList();
             }
@@ -351,7 +370,7 @@ public class InventoryService : IInventoryService
             storeInventory.MinimumStock,
             storeInventory.IsLowStock(),
             storeInventory.CreatedAt,
-            null, null, product?.PurchasePrice ?? 0
+            null, null, product?.PurchasePrice ?? 0, 0, null, product?.BaseUOMCode
         );
     }
 
@@ -397,7 +416,7 @@ public class InventoryService : IInventoryService
             storeInventory.MinimumStock,
             storeInventory.IsLowStock(),
             storeInventory.CreatedAt,
-            null, null, product?.PurchasePrice ?? 0
+            null, null, product?.PurchasePrice ?? 0, 0, null, product?.BaseUOMCode
         );
     }
 
@@ -499,7 +518,7 @@ public class InventoryService : IInventoryService
             ?? throw new InvalidOperationException("Failed to retrieve updated store inventory");
     }
 
-    public async Task<StoreInventoryDto> UpdateMinimumStockAsync(Guid storeInventoryId, int minimumStock, string? token = null)
+    public async Task<StoreInventoryDto> UpdateMinimumStockAsync(Guid storeInventoryId, decimal minimumStock, string? token = null)
     {
         var storeInventory = await _context.StoreInventories.FindAsync(storeInventoryId);
         if (storeInventory == null)
@@ -662,7 +681,8 @@ public class InventoryService : IInventoryService
                         detail.BonusUOMId,
                         bonusUom?.Code,
                         bonusUom?.Name,
-                        product.Barcode
+                        product.Barcode,
+                        detail.ExpirationDate
                     ));
                 }
             }
@@ -727,7 +747,8 @@ public class InventoryService : IInventoryService
                     detail.BonusUOMId,
                     bonusUom?.Code,
                     bonusUom?.Name,
-                    product.Barcode
+                    product.Barcode,
+                    detail.ExpirationDate
                 ));
             }
         }
@@ -797,7 +818,8 @@ public class InventoryService : IInventoryService
                 detailRequest.Quantity,
                 detailRequest.UnitPrice,
                 detailRequest.BonusQuantity,
-                detailRequest.BonusUOMId
+                detailRequest.BonusUOMId,
+                detailRequest.ExpirationDate
             );
 
             purchase.AddDetail(detail);
@@ -844,6 +866,27 @@ public class InventoryService : IInventoryService
             }
 
             var quantityInt = (int)Math.Ceiling(quantityInBaseUOM);
+
+            if (productInfo.HasExpiration)
+            {
+                if (!detail.ExpirationDate.HasValue)
+                {
+                    throw new InvalidOperationException($"El producto '{productInfo.Name}' requiere fecha de vencimiento.");
+                }
+
+                var batch = new InventoryBatch(
+                    detail.ProductId,
+                    purchase.StoreId,
+                    quantityInt,
+                    quantityInBaseUOM > 0 ? detail.Subtotal / quantityInBaseUOM : 0,
+                    DateTime.UtcNow,
+                    detail.ExpirationDate.Value,
+                    purchase.PurchaseNumber,
+                    purchase.SupplierId
+                );
+                _context.InventoryBatches.Add(batch);
+            }
+
 
             // Find or create store inventory
             var storeInventory = await _context.StoreInventories
@@ -1145,8 +1188,11 @@ public class InventoryService : IInventoryService
                                 (int)u.ConversionToBase, 
                                 u.IsDefault, 
                                 u.Price,
+                                u.Barcode,
                                 u.Prices?.Select(pr => new ProductPriceDto(pr.PriceListId, pr.PriceListCode, pr.PriceListName, pr.Price)).ToList()
-                            )).ToList()
+                            )).ToList(),
+                            p.BaseUOMCode,
+                            p.AllowFractional
                         );
                     }).ToList();
                 }
@@ -1211,11 +1257,14 @@ public class InventoryService : IInventoryService
                                 u.UOMId, 
                                 u.UOMCode ?? "", 
                                 u.UOMName ?? "", 
-                                (int)u.ConversionToBase, 
+                                u.ConversionToBase, 
                                 u.IsDefault, 
                                 u.Price,
+                                u.Barcode,
                                 u.Prices?.Select(pr => new ProductPriceDto(pr.PriceListId, pr.PriceListCode, pr.PriceListName, pr.Price)).ToList()
-                            )).ToList()
+                            )).ToList(),
+                            p.BaseUOMCode,
+                            p.AllowFractional
                         );
                     }).ToList();
                 }
@@ -1710,12 +1759,12 @@ public class InventoryService : IInventoryService
                  throw new InvalidOperationException($"Stock insuficiente para el producto {item.ProductId} en la tienda de origen.");
              }
              
-             originInventory.RemoveStock((int)item.Quantity);
+             originInventory.RemoveStock(item.Quantity);
              
              var movement = new InventoryMovement(
                 tenantId,
                 originInventory.Id,
-                -(int)item.Quantity,
+                -item.Quantity,
                 InventoryMovementType.TransferOut,
                 $"Transferencia Enviada ({trfCode}): {request.Notes}",
                 request.RequestedByUserId,
@@ -1894,12 +1943,12 @@ public class InventoryService : IInventoryService
                  _context.StoreInventories.Add(destInventory);
              }
              
-             destInventory.AddStock((int)detail.Quantity);
+             destInventory.AddStock(detail.Quantity);
              
              var movement = new InventoryMovement(
                 tenantId,
                 destInventory.Id,
-                (int)detail.Quantity,
+                detail.Quantity,
                 InventoryMovementType.TransferIn,
                 $"Transferencia Recibida ({transfer.TransferNumber}): {transfer.Notes}",
                 userId,
@@ -1936,12 +1985,12 @@ public class InventoryService : IInventoryService
                  _context.StoreInventories.Add(originInventory);
              }
 
-             originInventory.AddStock((int)detail.Quantity);
+             originInventory.AddStock(detail.Quantity);
 
              var movement = new InventoryMovement(
                 tenantId,
                 originInventory.Id,
-                (int)detail.Quantity,
+                detail.Quantity,
                 InventoryMovementType.TransferIn, 
                 $"Cancelación de Transferencia ({transfer.TransferNumber})",
                 userId,

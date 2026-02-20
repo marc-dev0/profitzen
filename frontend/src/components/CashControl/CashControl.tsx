@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuthStore } from '@/store/authStore';
 import { useCashShift, useOpenShift, useCloseShift, useAddCashMovement } from '@/hooks/useCashShift';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { NumberInput } from '@/components/ui/number-input';
@@ -121,11 +123,11 @@ export function CashControl({ className, onShiftStatusChange }: CashControlProps
             <>
                 <Button
                     onClick={() => setIsOpenModalOpen(true)}
-                    variant="destructive" // Red to indicate it needs attention
-                    className={`gap-2 font-bold shadow-sm ${className}`}
+                    variant="destructive"
+                    className={`gap-3 py-6 px-8 text-xl font-black shadow-2xl hover:scale-105 transition-all active:scale-95 ${className}`}
                 >
-                    <Lock className="w-4 h-4" />
-                    Caja Cerrada
+                    <Unlock className="w-6 h-6" />
+                    ABRIR CAJA
                 </Button>
 
                 <Dialog open={isOpenModalOpen} onOpenChange={setIsOpenModalOpen}>
@@ -185,24 +187,26 @@ export function CashControl({ className, onShiftStatusChange }: CashControlProps
                     </div>
                 </Button>
 
-                <Button
-                    size="icon"
-                    variant="ghost"
-                    title="Ver Historial de Caja"
-                    onClick={() => router.push('/cash-control')}
-                    className="text-muted-foreground hover:text-primary"
+                <Link
+                    href="/cash-control"
+                    className={cn(
+                        buttonVariants({ variant: 'ghost' }),
+                        "text-foreground hover:bg-primary/20 hover:text-primary gap-2 px-3 transition-all h-auto py-2"
+                    )}
                 >
-                    <History className="w-4 h-4" />
-                </Button>
+                    <History className="w-4 h-4 text-primary" />
+                    <span className="text-xs font-bold uppercase tracking-tight">Historial</span>
+                </Link>
+
+                <div className="w-px h-6 bg-border mx-1" />
 
                 <Button
-                    size="icon"
                     variant="ghost"
-                    title="Cerrar Caja"
                     onClick={() => setIsCloseModalOpen(true)}
-                    className="text-muted-foreground hover:text-destructive"
+                    className="text-foreground hover:bg-red-500/20 hover:text-red-400 gap-2 px-3 group transition-all"
                 >
-                    <Lock className="w-4 h-4" />
+                    <Lock className="w-4 h-4 text-red-500 group-hover:animate-pulse" />
+                    <span className="text-xs font-bold uppercase tracking-tight">Cerrar Caja</span>
                 </Button>
             </div>
 

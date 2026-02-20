@@ -19,6 +19,7 @@ public class InventoryDbContext : DbContext
 
     public DbSet<Transfer> Transfers { get; set; }
     public DbSet<TransferDetail> TransferDetails { get; set; }
+    public DbSet<InventoryBatch> InventoryBatches { get; set; } // Added
 
     // We need Store entity in this context to query names IF it is shared or replicated.
     // In this monolithic demo, Store is in Inventory or Configuration?
@@ -41,6 +42,9 @@ public class InventoryDbContext : DbContext
             entity.HasIndex(e => new { e.ProductId, e.StoreId }).IsUnique();
             entity.HasIndex(e => e.StoreId);
 
+            entity.Property(e => e.CurrentStock).HasPrecision(18, 6);
+            entity.Property(e => e.MinimumStock).HasPrecision(18, 6);
+
             entity.HasMany(e => e.Movements)
                   .WithOne(m => m.StoreInventory)
                   .HasForeignKey(m => m.StoreInventoryId)
@@ -56,6 +60,10 @@ public class InventoryDbContext : DbContext
             entity.HasIndex(e => e.StoreInventoryId);
             entity.HasIndex(e => e.MovementDate);
             entity.HasIndex(e => e.Type);
+
+            entity.Property(e => e.Quantity).HasPrecision(18, 6);
+            entity.Property(e => e.OriginalQuantity).HasPrecision(18, 6);
+            entity.Property(e => e.ConversionFactor).HasPrecision(18, 6);
         });
 
         // InventoryAdjustment Configuration
@@ -68,6 +76,10 @@ public class InventoryDbContext : DbContext
             entity.HasIndex(e => e.StoreInventoryId);
             entity.HasIndex(e => e.AdjustmentDate);
             entity.HasIndex(e => e.AdjustmentType);
+
+            entity.Property(e => e.Quantity).HasPrecision(18, 6);
+            entity.Property(e => e.PreviousStock).HasPrecision(18, 6);
+            entity.Property(e => e.NewStock).HasPrecision(18, 6);
             entity.HasIndex(e => e.UserId);
 
             entity.HasOne(e => e.StoreInventory)
@@ -176,6 +188,24 @@ public class InventoryDbContext : DbContext
             entity.HasIndex(e => new { e.TenantId, e.DocumentType });
             entity.HasIndex(e => e.IsDefault);
             entity.HasIndex(e => e.IsActive);
+        });
+        
+        // InventoryBatch Configuration
+        modelBuilder.Entity<InventoryBatch>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Quantity).HasPrecision(18, 6);
+            entity.Property(e => e.RemainingQuantity).HasPrecision(18, 6);
+            entity.Property(e => e.UnitCost).HasPrecision(18, 2);
+            entity.Property(e => e.BatchNumber).HasMaxLength(100);
+
+            entity.HasIndex(e => e.ProductId);
+            entity.HasIndex(e => e.StoreId);
+            entity.HasIndex(e => e.ExpirationDate);
+            entity.HasIndex(e => e.IsActive);
+            
+            // Helpful index for FEFO logic
+            entity.HasIndex(e => new { e.ProductId, e.StoreId, e.IsActive, e.RemainingQuantity });
         });
 
         base.OnModelCreating(modelBuilder);

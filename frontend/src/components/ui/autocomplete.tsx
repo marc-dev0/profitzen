@@ -126,6 +126,30 @@ export function Autocomplete({
     inputRef.current?.select();
   };
 
+  const handleBlur = () => {
+    // Retraso para permitir clicks en el dropdown
+    setTimeout(() => {
+      if (searchTerm && !value) {
+        const match = options.find(opt =>
+          opt.name.toLowerCase() === searchTerm.toLowerCase() ||
+          opt.code.toLowerCase() === searchTerm.toLowerCase()
+        );
+
+        if (match) {
+          onChange(match.id);
+        }
+        // Si no hay match, el comportamiento visual reseteará el input al valor anterior (vacío)
+        // cuando se cierre o searchTerm se limpie, lo cual es correcto para indicar error.
+        // Pero limpiamos searchTerm para evitar estados confusos.
+        setSearchTerm('');
+        setIsOpen(false);
+      } else if (!value) {
+        // Si estaba vacío y no escribió nada útil
+        setIsOpen(false);
+      }
+    }, 200);
+  };
+
   return (
     <div className="relative w-full">
       <input
@@ -138,6 +162,7 @@ export function Autocomplete({
         }}
         onFocus={handleFocus}
         onKeyDown={handleKeyDown}
+        onBlur={handleBlur}
         placeholder={placeholder}
         disabled={disabled}
         id={id}
@@ -159,8 +184,8 @@ export function Autocomplete({
               <div
                 key={option.id}
                 className={`px-4 py-2 cursor-pointer text-sm ${index === highlightedIndex
-                    ? 'bg-blue-50 text-blue-900'
-                    : 'text-gray-900 hover:bg-gray-50'
+                  ? 'bg-blue-50 text-blue-900'
+                  : 'text-gray-900 hover:bg-gray-50'
                   } ${option.id === value ? 'font-semibold' : ''}`}
                 onClick={() => handleSelect(option.id)}
                 onMouseEnter={() => setHighlightedIndex(index)}

@@ -158,6 +158,11 @@ namespace Profitzen.Product.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<bool>("HasExpiration")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("ImageUrl")
                         .HasColumnType("text");
 
@@ -238,6 +243,9 @@ namespace Profitzen.Product.Migrations
                     b.Property<Guid>("ProductId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
                     b.Property<Guid>("UOMId")
                         .HasColumnType("uuid");
 
@@ -264,6 +272,10 @@ namespace Profitzen.Product.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Barcode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<decimal>("ConversionToBase")
                         .HasPrecision(18, 6)
                         .HasColumnType("numeric(18,6)");
@@ -287,6 +299,9 @@ namespace Profitzen.Product.Migrations
                     b.Property<Guid>("ProductId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
                     b.Property<Guid>("UOMId")
                         .HasColumnType("uuid");
 
@@ -294,6 +309,8 @@ namespace Profitzen.Product.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Barcode");
 
                     b.HasIndex("IsActive");
 

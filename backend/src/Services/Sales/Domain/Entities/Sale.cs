@@ -16,6 +16,9 @@ public class Sale : BaseEntity
     public decimal DiscountAmount { get; private set; }
     public decimal TaxAmount { get; private set; }
     public decimal Total { get; private set; }
+    public decimal RoundingAdjustment { get; private set; }
+    public decimal AmountReceived { get; private set; }
+    public decimal ChangeAmount { get; private set; }
     public SaleStatus Status { get; private set; }
     public string? Notes { get; private set; }
 
@@ -48,7 +51,7 @@ public class Sale : BaseEntity
     }
 
     public void AddItem(Guid productId, string productName, string productCode,
-                       int quantity, decimal unitPrice, decimal discount = 0, decimal conversionToBase = 1,
+                       decimal quantity, decimal unitPrice, decimal discount = 0, decimal conversionToBase = 1,
                        Guid? uomId = null, string? uomCode = null)
     {
         if (Status != SaleStatus.Pending)
@@ -81,7 +84,7 @@ public class Sale : BaseEntity
         }
     }
 
-    public void UpdateItemQuantity(Guid productId, int newQuantity)
+    public void UpdateItemQuantity(Guid productId, decimal newQuantity)
     {
         if (Status != SaleStatus.Pending)
             throw new InvalidOperationException("Cannot modify a completed sale");
@@ -122,25 +125,36 @@ public class Sale : BaseEntity
         // Completion must be explicitly called via the Service layer.
     }
 
-    public void Complete(string? documentSeries = null, string? documentNumber = null)
+    public void Complete(decimal? amountReceived = null, string? documentSeries = null, string? documentNumber = null, decimal roundingAdjustment = 0)
     {
         if (!Items.Any())
             throw new InvalidOperationException("Cannot complete sale without items");
 
-        var totalPaid = Payments.Sum(p => p.Amount);
+        RoundingAdjustment = roundingAdjustment;
+        var roundedTotal = Total + RoundingAdjustment;
+        var totalPaidInPayments = Payments.Sum(p => p.Amount);
+        
+        // If amountReceived is provided (e.g. from POS), use it to calculate change
+        if (amountReceived.HasValue)
+        {
+            AmountReceived = amountReceived.Value;
+            ChangeAmount = Math.Max(0, AmountReceived - roundedTotal);
+        }
+        else
+        {
+            // Fallback: use total paid in payments
+            AmountReceived = totalPaidInPayments;
+            ChangeAmount = Math.Max(0, AmountReceived - roundedTotal);
+        }
+
         // Small tolerance for floating point issues or rounding
-        if (totalPaid < Total - 0.05m) 
-            throw new InvalidOperationException($"Insufficient payment amount. Paid: {totalPaid}, Total: {Total}");
+        if (totalPaidInPayments < roundedTotal - 0.05m && AmountReceived < roundedTotal - 0.05m) 
+            throw new InvalidOperationException($"Insufficient payment amount. Total: {roundedTotal}");
 
         Status = SaleStatus.Completed;
         DocumentSeries = documentSeries;
         DocumentNumber = documentNumber;
-        
-        // If we have a valid document number, we might want to override the internal SaleNumber or keep it as reference
-        // For now, SaleNumber is internal ID, DocumentNumber is Tax ID.
     }
-
-
 
     public void Refund()
     {

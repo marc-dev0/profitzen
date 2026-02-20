@@ -31,7 +31,8 @@ public class Product : BaseEntity
     public Product(string code, string name, string description, Guid categoryId,
                   decimal purchasePrice, decimal salePrice, decimal wholesalePrice, string tenantId,
                   Guid? baseUOMId = null, string? barcode = null, bool allowFractional = false, 
-                  string? categoryName = null, string? shortScanCode = null, string? purchaseConversionMethod = "base")
+                  string? categoryName = null, string? shortScanCode = null, string? purchaseConversionMethod = "base",
+                  bool hasExpiration = false)
     {
         Code = code;  // Will be auto-generated in service if empty
         Barcode = barcode;
@@ -48,6 +49,7 @@ public class Product : BaseEntity
         BaseUOMId = baseUOMId ?? Guid.Empty;
         AllowFractional = allowFractional;
         PurchaseConversionMethod = purchaseConversionMethod ?? "base";
+        HasExpiration = hasExpiration;
         IsActive = true;
     }
 
@@ -68,7 +70,9 @@ public class Product : BaseEntity
         ShortScanCode = shortScanCode;
     }
 
-    public void Update(string name, string description, Guid categoryId, string? categoryName = null, string? purchaseConversionMethod = null)
+    public bool HasExpiration { get; private set; } // Tracks if product has expiration dates
+    
+    public void Update(string name, string description, Guid categoryId, string? categoryName = null, string? purchaseConversionMethod = null, bool? hasExpiration = null)
     {
         Name = name;
         Description = description;
@@ -78,6 +82,11 @@ public class Product : BaseEntity
         {
             PurchaseConversionMethod = purchaseConversionMethod;
         }
+        if (hasExpiration.HasValue)
+        {
+            HasExpiration = hasExpiration.Value;
+        }
+        UpdatedAt = DateTime.UtcNow;
     }
 
     public void UpdatePrices(decimal purchasePrice, decimal salePrice, decimal wholesalePrice)

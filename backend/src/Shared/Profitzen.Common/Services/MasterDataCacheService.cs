@@ -39,23 +39,42 @@ public class MasterDataCacheService : IMasterDataCacheService
 
         lock (_cacheLock)
         {
-            _logger.LogInformation("Looking for UOM {UOMId} in cache. Cache has {Count} items", uomId, _uomCache.Count);
-
             if (_uomCache.TryGetValue(uomId, out var uom))
             {
-                _logger.LogInformation("Found UOM {UOMId}: {Code} - {Name}", uomId, uom.Code, uom.Name);
                 return uom;
             }
-
-            _logger.LogWarning("UOM {UOMId} not found in cache. Available IDs: {IDs}", uomId, string.Join(", ", _uomCache.Keys.Take(5)));
         }
 
+        // Not found, try force refresh
+        _logger.LogInformation("UOM {UOMId} not found in cache, forcing refresh", uomId);
+        await ForceRefreshCacheAsync(tenantId);
+
+        lock (_cacheLock)
+        {
+            if (_uomCache.TryGetValue(uomId, out var uom))
+            {
+                return uom;
+            }
+        }
+
+        _logger.LogWarning("UOM {UOMId} not found even after refresh.", uomId);
         return null;
     }
 
     public async Task<string?> GetCategoryNameAsync(Guid categoryId, string? tenantId = null)
     {
         await RefreshCacheIfNeededAsync(tenantId);
+
+        lock (_cacheLock)
+        {
+            if (_categoryCache.TryGetValue(categoryId, out var categoryName))
+            {
+                return categoryName;
+            }
+        }
+        
+        // Try force refresh for categories too
+        await ForceRefreshCacheAsync(tenantId);
 
         lock (_cacheLock)
         {
@@ -81,17 +100,11 @@ public class MasterDataCacheService : IMasterDataCacheService
             }
         }
 
-        lock (_cacheLock)
-        {
-            if (DateTime.UtcNow - _lastCacheUpdate < _cacheExpiration)
-            {
-                if (_uomCache.Count > 0 || _categoryCache.Count > 0)
-                {
-                    return;
-                }
-            }
-        }
+        await ForceRefreshCacheAsync(tenantId);
+    }
 
+    private async Task ForceRefreshCacheAsync(string? tenantId = null)
+    {
         await Task.WhenAll(
             LoadUOMsAsync(tenantId),
             LoadCategoriesAsync(tenantId)
@@ -117,6 +130,7 @@ public class MasterDataCacheService : IMasterDataCacheService
             if (response.IsSuccessStatusCode)
             {
                 var content = await response.Content.ReadAsStringAsync();
+                _logger.LogInformation("Master Data JSON: {Content}", content);
                 var uoms = JsonSerializer.Deserialize<List<MasterDataValueDto>>(content, new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
@@ -126,7 +140,13 @@ public class MasterDataCacheService : IMasterDataCacheService
                 {
                     lock (_cacheLock)
                     {
-                        _uomCache = uoms.ToDictionary(u => u.Id, u => (u.Code, u.Name));
+                        _uomCache = uoms.ToDictionary(
+                            u => u.Id, 
+                            u => (
+                                !string.IsNullOrEmpty(u.Code) ? u.Code : (!string.IsNullOrEmpty(u.Value) ? u.Value : "UND"),
+                                !string.IsNullOrEmpty(u.Name) ? u.Name : (!string.IsNullOrEmpty(u.Description) ? u.Description : (!string.IsNullOrEmpty(u.Value) ? u.Value : "Unidad"))
+                            )
+                        );
                         _logger.LogInformation("Loaded {Count} UOMs into cache", _uomCache.Count);
                     }
                 }
@@ -165,7 +185,10 @@ public class MasterDataCacheService : IMasterDataCacheService
                 {
                     lock (_cacheLock)
                     {
-                        _categoryCache = categories.ToDictionary(c => c.Id, c => c.Name);
+                        _categoryCache = categories.ToDictionary(
+                            c => c.Id, 
+                            c => !string.IsNullOrEmpty(c.Name) ? c.Name : (!string.IsNullOrEmpty(c.Description) ? c.Description : "Sin Categoría")
+                        );
                         _logger.LogInformation("Loaded {Count} categories into cache", _categoryCache.Count);
                     }
                 }
@@ -186,5 +209,7 @@ public class MasterDataCacheService : IMasterDataCacheService
         public Guid Id { get; set; }
         public string Code { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
+        public string Value { get; set; } = string.Empty; // Fallback
+        public string Description { get; set; } = string.Empty; // Fallback
     }
 }

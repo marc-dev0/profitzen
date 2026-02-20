@@ -13,6 +13,7 @@ public class PurchaseDetail : BaseEntity
     public decimal Subtotal { get; private set; }
     public decimal? BonusQuantity { get; private set; }
     public Guid? BonusUOMId { get; private set; }
+    public DateTime? ExpirationDate { get; private set; }
 
     public Purchase Purchase { get; private set; } = null!;
 
@@ -26,7 +27,8 @@ public class PurchaseDetail : BaseEntity
         decimal quantity,
         decimal unitPrice,
         decimal? bonusQuantity = null,
-        Guid? bonusUOMId = null)
+        Guid? bonusUOMId = null,
+        DateTime? expirationDate = null)
     {
         if (quantity <= 0)
             throw new ArgumentException("Quantity must be greater than zero", nameof(quantity));
@@ -43,6 +45,7 @@ public class PurchaseDetail : BaseEntity
         UnitPrice = unitPrice;
         BonusQuantity = bonusQuantity;
         BonusUOMId = bonusUOMId;
+        ExpirationDate = expirationDate?.ToUniversalTime();
         Subtotal = quantity * unitPrice;
     }
 

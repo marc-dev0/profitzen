@@ -163,8 +163,11 @@ public class CashShiftService : ICashShiftService
             .AsNoTracking()
             .ToListAsync();
 
-        // 3. Update Sales Totals
-        shift.TotalSalesCash = sales.Sum(s => s.Payments.Where(p => p.Method == PaymentMethod.Cash).Sum(p => p.Amount));
+        // 3. Update Sales Totals (Including Rounding Adjustment for Cash)
+        shift.TotalSalesCash = sales
+            .Where(s => s.Payments.Any(p => p.Method == PaymentMethod.Cash))
+            .Sum(s => s.Payments.Where(p => p.Method == PaymentMethod.Cash).Sum(p => p.Amount) + s.RoundingAdjustment);
+
         shift.TotalSalesCard = sales.Sum(s => s.Payments.Where(p => p.Method == PaymentMethod.Card).Sum(p => p.Amount));
         shift.TotalSalesTransfer = sales.Sum(s => s.Payments.Where(p => p.Method == PaymentMethod.Transfer).Sum(p => p.Amount));
         shift.TotalSalesWallet = sales.Sum(s => s.Payments.Where(p => p.Method == PaymentMethod.DigitalWallet).Sum(p => p.Amount));

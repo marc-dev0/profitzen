@@ -9,10 +9,10 @@ public class InventoryAdjustment : BaseEntity
     public string TenantId { get; private set; } = string.Empty;
     public Guid StoreInventoryId { get; private set; }
     public string AdjustmentType { get; private set; } = string.Empty;
-    public int Quantity { get; private set; }
+    public decimal Quantity { get; private set; }
     public bool IsPositive { get; private set; }
-    public int PreviousStock { get; private set; }
-    public int NewStock { get; private set; }
+    public decimal PreviousStock { get; private set; }
+    public decimal NewStock { get; private set; }
     public string Reason { get; private set; } = string.Empty;
     public Guid UserId { get; private set; }
     public DateTime AdjustmentDate { get; private set; }
@@ -25,9 +25,9 @@ public class InventoryAdjustment : BaseEntity
         string tenantId,
         Guid storeInventoryId,
         string adjustmentType,
-        int quantity,
+        decimal quantity,
         bool isPositive,
-        int previousStock,
+        decimal previousStock,
         string reason,
         Guid userId)
     {

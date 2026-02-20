@@ -69,6 +69,13 @@ builder.Services.AddScoped<IInventoryClient, InventoryClient>();
 builder.Services.AddScoped<ICustomerClient, CustomerClient>();
 builder.Services.AddScoped<ICashShiftService, CashShiftService>();
 builder.Services.AddHttpClient<IConfigurationClient, ConfigurationClient>();
+
+// PaymentMethods client for retrieving cached calculations
+builder.Services.AddHttpClient<Profitzen.Sales.Application.Clients.PaymentMethodsClient>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["ServiceUrls:PaymentMethods"] ?? "http://localhost:5008");
+});
+
 builder.Services.AddServiceAuth();
 
 builder.Services.AddCors(options =>

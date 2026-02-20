@@ -8,7 +8,9 @@ public class ProductSaleUOM : BaseEntity
     public Guid UOMId { get; private set; }
     public decimal ConversionToBase { get; private set; }
     public decimal Price { get; private set; }
+    public string? Barcode { get; private set; }
     public bool IsDefault { get; private set; }
+    public int SortOrder { get; private set; }
     public bool IsActive { get; private set; }
 
     public Product Product { get; private set; } = null!;
@@ -21,7 +23,9 @@ public class ProductSaleUOM : BaseEntity
         Guid uomId,
         decimal conversionToBase,
         decimal price,
-        bool isDefault = false)
+        bool isDefault = false,
+        string? barcode = null,
+        int sortOrder = 0)
     {
         if (conversionToBase <= 0)
             throw new ArgumentException("Conversion to base must be greater than zero", nameof(conversionToBase));
@@ -33,7 +37,15 @@ public class ProductSaleUOM : BaseEntity
         ConversionToBase = conversionToBase;
         Price = price;
         IsDefault = isDefault;
+        Barcode = barcode;
+        SortOrder = sortOrder;
         IsActive = true;
+    }
+
+    public void SetBarcode(string? barcode)
+    {
+        Barcode = barcode;
+        UpdatedAt = DateTime.UtcNow;
     }
 
     public void SetAsDefault()

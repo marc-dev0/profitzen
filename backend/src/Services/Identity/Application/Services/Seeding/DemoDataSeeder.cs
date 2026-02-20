@@ -298,14 +298,14 @@ public class DemoDataSeeder : IDemoDataSeeder
             (UserRole.Admin, "sales"), (UserRole.Admin, "customers"),
             (UserRole.Admin, "analytics"), (UserRole.Admin, "analytics_ia"), (UserRole.Admin, "analytics_ia_history"),
             (UserRole.Admin, "products"), (UserRole.Admin, "inventory"), (UserRole.Admin, "purchases"), (UserRole.Admin, "suppliers"),
-            (UserRole.Admin, "settings"), (UserRole.Admin, "users"),
+            (UserRole.Admin, "settings"), (UserRole.Admin, "users"), (UserRole.Admin, "hardware"),
 
             // Manager (2)
             (UserRole.Manager, "dashboard"), (UserRole.Manager, "pos"), (UserRole.Manager, "stores"),
             (UserRole.Manager, "sales"), (UserRole.Manager, "customers"),
             (UserRole.Manager, "analytics"), (UserRole.Manager, "analytics_ia"), (UserRole.Manager, "analytics_ia_history"),
             (UserRole.Manager, "products"), (UserRole.Manager, "inventory"), (UserRole.Manager, "purchases"), (UserRole.Manager, "suppliers"),
-            (UserRole.Manager, "settings"),
+            (UserRole.Manager, "settings"), (UserRole.Manager, "hardware"),
 
             // Cashier (4)
             (UserRole.Cashier, "pos"), (UserRole.Cashier, "sales"), (UserRole.Cashier, "customers"), (UserRole.Cashier, "stores"),
@@ -329,58 +329,78 @@ public class DemoDataSeeder : IDemoDataSeeder
 
     public async Task SeedAppModulesAsync()
     {
-        // For modules, we check if they exist. If they do, we might want to update them, 
-        // but for now, we only seed if empty to avoid breaking foreign keys or losing visibility settings.
-        var existingCount = await _context.AppModules.CountAsync();
-        if (existingCount > 0)
-        {
-            _logger.LogInformation("System modules already exist, skipping initial seed.");
-            return;
-        }
-
-        _logger.LogInformation("Refreshing system modules via Initial Seed...");
+        _logger.LogInformation("Checking system modules...");
         
-        // Deep clean using raw SQL to clear hierarchical residues
-        await _context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE identity.\"AppModules\" RESTART IDENTITY CASCADE;");
-
-        var modules = new List<AppModule>
+        var modulesData = new List<(string Code, string Name, string Route, string Icon, string Group, int Order)>
         {
             // PRINCIPAL
-            new AppModule { Code = "dashboard", Name = "Dashboard", Route = "/dashboard", Icon = "LayoutDashboard", GroupName = "PRINCIPAL", SortOrder = 1 },
-            new AppModule { Code = "pos", Name = "Punto de Venta", Route = "/pos", Icon = "ShoppingCart", GroupName = "PRINCIPAL", SortOrder = 2 },
-            new AppModule { Code = "stores", Name = "Sucursales", Route = "/stores", Icon = "Store", GroupName = "PRINCIPAL", SortOrder = 3 },
+            ("dashboard", "Dashboard", "/dashboard", "LayoutDashboard", "PRINCIPAL", 1),
+            ("pos", "Punto de Venta", "/pos", "ShoppingCart", "PRINCIPAL", 2),
+            ("stores", "Sucursales", "/stores", "Store", "PRINCIPAL", 3),
             
             // VENTAS
-            new AppModule { Code = "sales", Name = "Historial de Ventas", Route = "/sales", Icon = "FileText", GroupName = "VENTAS", SortOrder = 1 },
-            new AppModule { Code = "customers", Name = "Clientes", Route = "/customers", Icon = "Users", GroupName = "VENTAS", SortOrder = 2 },
+            ("sales", "Historial de Ventas", "/sales", "FileText", "VENTAS", 1),
+            ("customers", "Clientes", "/customers", "Users", "VENTAS", 2),
             
             // INTELIGENCIA
-            new AppModule { Code = "analytics", Name = "Centro Analítico", Route = "/analytics", Icon = "BarChart3", GroupName = "INTELIGENCIA", SortOrder = 1 },
-            new AppModule { Code = "analytics_ia", Name = "Analizador IA", Route = "/analytics/ia", Icon = "BrainCircuit", GroupName = "INTELIGENCIA", SortOrder = 2 },
-            new AppModule { Code = "analytics_ia_history", Name = "Bitácora de IA", Route = "/analytics/ia/vigilante/history", Icon = "Clock", GroupName = "INTELIGENCIA", SortOrder = 3 },
+            ("analytics", "Centro Analítico", "/analytics", "BarChart3", "INTELIGENCIA", 1),
+            ("analytics_ia", "Analizador IA", "/analytics/ia", "BrainCircuit", "INTELIGENCIA", 2),
+            ("analytics_ia_history", "Bitácora de IA", "/analytics/ia/vigilante/history", "Clock", "INTELIGENCIA", 3),
             
             // OPERACIONES
-            new AppModule { Code = "products", Name = "Catálogo de Productos", Route = "/products", Icon = "Tags", GroupName = "OPERACIONES", SortOrder = 1 },
-            new AppModule { Code = "inventory", Name = "Control de Stock", Route = "/inventory", Icon = "Package", GroupName = "OPERACIONES", SortOrder = 2 },
-            new AppModule { Code = "purchases", Name = "Gestión de Compras", Route = "/purchases", Icon = "CreditCard", GroupName = "OPERACIONES", SortOrder = 3 },
-            new AppModule { Code = "suppliers", Name = "Proveedores", Route = "/suppliers", Icon = "Truck", GroupName = "OPERACIONES", SortOrder = 4 },
+            ("products", "Catálogo de Productos", "/products", "Tags", "OPERACIONES", 1),
+            ("inventory", "Control de Stock", "/inventory", "Package", "OPERACIONES", 2),
+            ("purchases", "Gestión de Compras", "/purchases", "CreditCard", "OPERACIONES", 3),
+            ("suppliers", "Proveedores", "/suppliers", "Truck", "OPERACIONES", 4),
             
             // CONFIGURACION
-            new AppModule { Code = "settings", Name = "Mi Empresa", Route = "/settings", Icon = "Store", GroupName = "CONFIGURACION", SortOrder = 1 },
-            new AppModule { Code = "users", Name = "Usuarios y Roles", Route = "/users", Icon = "UserCog", GroupName = "CONFIGURACION", SortOrder = 2 }
+            ("settings", "Mi Empresa", "/settings", "Store", "CONFIGURACION", 1),
+            ("users", "Usuarios y Roles", "/users", "UserCog", "CONFIGURACION", 2),
+            ("hardware", "Hardware y Periféricos", "/settings/hardware", "Monitor", "CONFIGURACION", 3)
         };
 
-        foreach (var m in modules)
+        foreach (var mData in modulesData)
         {
-            m.Id = Guid.NewGuid();
-            m.CreatedAt = DateTime.UtcNow;
-            m.IsActive = true;
-            m.IsVisibleInMenu = true;
-            _context.AppModules.Add(m);
+            var exists = await _context.AppModules.AnyAsync(m => m.Code == mData.Code);
+            if (!exists)
+            {
+                _context.AppModules.Add(new AppModule
+                {
+                    Id = Guid.NewGuid(),
+                    Code = mData.Code,
+                    Name = mData.Name,
+                    Route = mData.Route,
+                    Icon = mData.Icon,
+                    GroupName = mData.Group,
+                    SortOrder = mData.Order,
+                    CreatedAt = DateTime.UtcNow,
+                    IsActive = true,
+                    IsVisibleInMenu = true
+                });
+                _logger.LogInformation("Module {Code} added to database.", mData.Code);
+            }
         }
 
         await _context.SaveChangesAsync();
-        _logger.LogInformation("System modules flattened and seeded successfully.");
+
+        // Also ensure permissions for Admin and Manager are present
+        var rolesToSeed = new[] { UserRole.Admin, UserRole.Manager };
+        foreach (var role in rolesToSeed)
+        {
+            foreach (var mData in modulesData)
+            {
+                var permExists = await _context.RoleModulePermissions.AnyAsync(p => p.Role == role && p.Module == mData.Code);
+                if (!permExists)
+                {
+                    _context.RoleModulePermissions.Add(new RoleModulePermission
+                    {
+                        Role = role,
+                        Module = mData.Code
+                    });
+                }
+            }
+        }
+        await _context.SaveChangesAsync();
     }
 
     // DTOs para queries

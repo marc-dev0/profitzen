@@ -31,13 +31,11 @@ export default function SalesPrediction({ dailyHistory }: SalesPredictionProps) 
 
         setLoading(true);
         try {
-            // Transformamos el historial de .NET al formato que espera FastAPI (Python)
             const sales_history = dailyHistory.map(d => ({
                 date: d.date,
                 amount: d.totalRevenue
             }));
 
-            // Llamada al microservicio de Python (FastAPI)
             const response = await axios.post('http://localhost:8050/api/v1/process-sales', {
                 sales_history,
                 forecast_days: 7

@@ -29,6 +29,7 @@ interface UOMOption {
   conversionToBase: number;
   isDefault: boolean;
   price?: number;
+  barcode?: string;
   pricesByList?: PriceByList[];
   order?: number;
 }
@@ -72,6 +73,7 @@ export default function NewProductPage() {
       baseUOMId: '',
       allowFractional: false,
       purchaseConversionMethod: 'base',
+      hasExpiration: false,
     },
   });
 
@@ -90,12 +92,14 @@ export default function NewProductPage() {
     conversionToBase: string;
     conversionQuantity: string;
     conversionRelativeTo: 'base' | 'previous';
+    barcode: string;
     pricesByList: PriceByList[];
   }>({
     uomId: '',
     conversionToBase: '1',
     conversionQuantity: '1',
     conversionRelativeTo: 'base',
+    barcode: '',
     pricesByList: []
   });
 
@@ -276,6 +280,7 @@ export default function NewProductPage() {
         wholesalePrice: 0,
         baseUOMId: data.baseUOMId || undefined,
         allowFractional: data.allowFractional,
+        hasExpiration: data.hasExpiration,
         purchaseConversionMethod: currentPurchaseUOM.conversionRelativeTo,
         purchaseUOMs: purchaseUOMs.map(pu => ({
           uomId: pu.uomId,
@@ -294,6 +299,7 @@ export default function NewProductPage() {
             conversionToBase: su.conversionToBase,
             price: defaultPrice,
             isDefault: su.isDefault,
+            barcode: su.barcode || undefined,
             pricesByList: su.pricesByList || []
           };
         })
@@ -432,8 +438,8 @@ export default function NewProductPage() {
       return;
     }
 
-    const conversionValue = parseFloat(currentSaleUOM.conversionQuantity);
-    if (!currentSaleUOM.conversionQuantity || conversionValue <= 0) {
+    const conversionValue = parseFloat(currentSaleUOM.conversionToBase);
+    if (!currentSaleUOM.conversionToBase || conversionValue <= 0) {
       setSaleUOMError({ field: 'conversion' });
       setSubmitErrors(prev => ({ ...prev, saleUOMs: true }));
       toast.error('La cantidad debe ser mayor a 0');
@@ -499,17 +505,13 @@ export default function NewProductPage() {
       return;
     }
 
-    let conversionToBase: number;
-    if (currentSaleUOM.conversionRelativeTo === 'previous' && saleUOMs.length > 0) {
-      const previousUOM = saleUOMs[saleUOMs.length - 1];
-      conversionToBase = conversionValue * previousUOM.conversionToBase;
-    } else {
-      conversionToBase = conversionValue;
-    }
-
+    // The previous logic for conversionToBase based on 'previous' or 'base' is removed.
+    // Now, conversionToBase for sale UOMs is always directly the conversionValue,
+    // implying they are always relative to the base unit.
     setSaleUOMs([...saleUOMs, {
       uomId: currentSaleUOM.uomId,
-      conversionToBase: conversionToBase,
+      conversionToBase: conversionValue,
+      barcode: currentSaleUOM.barcode || '',
       isDefault: saleUOMs.length === 0,
       pricesByList: currentSaleUOM.pricesByList.map(p => ({ ...p })),
       order: saleUOMs.length
@@ -524,7 +526,8 @@ export default function NewProductPage() {
       uomId: '',
       conversionToBase: '1',
       conversionQuantity: '1',
-      conversionRelativeTo: saleUOMs.length === 0 ? 'base' : 'previous',
+      conversionRelativeTo: 'base',
+      barcode: '',
       pricesByList: initialPrices
     });
 
@@ -784,6 +787,21 @@ export default function NewProductPage() {
                     </label>
                     <p className="text-xs text-muted-foreground ml-6 mt-1">
                       Para productos por peso o volumen
+                    </p>
+
+                    <label className="flex items-center space-x-2 mt-4">
+                      <input
+                        type="checkbox"
+                        id="hasExpiration"
+                        {...register('hasExpiration')}
+                        className="w-4 h-4 text-primary border-input rounded focus:ring-primary"
+                      />
+                      <span className="text-sm text-foreground font-medium">
+                        Controlar fechas de vencimiento
+                      </span>
+                    </label>
+                    <p className="text-xs text-muted-foreground ml-6 mt-1">
+                      El sistema solicitará fecha de vencimiento al comprar o recibir stock
                     </p>
                   </div>
                 </div>
@@ -1121,7 +1139,7 @@ export default function NewProductPage() {
                   )}
                 </div>
 
-                <div className={`border border-border rounded-lg p-4 mb-4 ${saleUOMError.field ? 'border-destructive/50 bg-destructive/10' : 'border-border bg-muted/20'
+                <div className={`border border-border rounded-lg p-4 mb-4 ${saleUOMError.field ? 'border-red-500/50 bg-red-500/10' : 'border-border bg-muted/20'
                   }`}>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <div>
@@ -1149,24 +1167,59 @@ export default function NewProductPage() {
                       <label className="block text-sm font-medium text-foreground mb-2">
                         Factor de conversión
                       </label>
+                      <div className="flex items-center">
+                        <span className="px-3 py-2 bg-muted border border-r-0 border-input rounded-l-md text-muted-foreground text-sm whitespace-nowrap">
+                          1 {uoms?.find(u => u.id === currentSaleUOM.uomId)?.code || '___'} =
+                        </span>
+                        <input
+                          id="saleConversionInput"
+                          ref={saleConversionRef}
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          value={currentSaleUOM.conversionToBase}
+                          onChange={(e) => {
+                            setCurrentSaleUOM({ ...currentSaleUOM, conversionToBase: e.target.value });
+                            setSaleUOMError({ field: null });
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              // Foco al primer precio
+                              const firstPriceList = priceLists?.find(pl => pl.isActive);
+                              if (firstPriceList) {
+                                document.getElementById(`salePrice-${firstPriceList.id}`)?.focus();
+                              }
+                            }
+                          }}
+                          onFocus={(e) => e.target.select()}
+                          className={`w-32 px-2 py-2 border rounded-none focus:outline-none focus:ring-2 focus:z-10 bg-background text-foreground text-center font-mono ${saleUOMError.field === 'conversion'
+                            ? 'border-red-500 focus:ring-red-500'
+                            : 'border-input focus:ring-primary'
+                            }`}
+                          placeholder="1.0"
+                        />
+                        <span className="px-3 py-2 bg-muted border border-l-0 border-input rounded-r-md text-muted-foreground text-sm font-semibold whitespace-nowrap">
+                          {uoms?.find(u => u.id === formData.baseUOMId)?.code || 'BASE'}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        Código de Barras Específico
+                      </label>
                       <input
-                        id="saleConversionInput"
-                        ref={saleConversionRef}
-                        type="number"
-                        step="0.01"
-                        min="0.01"
-                        value={currentSaleUOM.conversionToBase}
+                        type="text"
+                        value={currentSaleUOM.barcode}
                         onChange={(e) => {
-                          setCurrentSaleUOM({ ...currentSaleUOM, conversionToBase: e.target.value });
-                          setSaleUOMError({ field: null });
+                          setCurrentSaleUOM({ ...currentSaleUOM, barcode: e.target.value });
                         }}
-                        onFocus={(e) => e.target.select()}
-                        className={`w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 bg-background text-foreground ${saleUOMError.field === 'conversion'
-                          ? 'border-destructive focus:ring-destructive'
-                          : 'border-input focus:ring-primary'
-                          }`}
-                        placeholder="1.0"
+                        className="w-full px-4 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-background text-foreground"
+                        placeholder="Escanea el código del pack/caja"
                       />
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        Opcional: Si el pack tiene su propio código
+                      </p>
                     </div>
                   </div>
 
@@ -1219,9 +1272,14 @@ export default function NewProductPage() {
                                     setCurrentSaleUOM({ ...currentSaleUOM, pricesByList: newPricesByList });
                                     setSaleUOMError({ field: null });
                                   }}
-                                  onFocus={(e) => e.target.select()}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      addSaleUOM();
+                                    }
+                                  }}
                                   className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 bg-background ${saleUOMError.field === 'prices' && !hasValue
-                                    ? 'border-destructive focus:ring-destructive text-foreground bg-destructive/5'
+                                    ? 'border-red-500 focus:ring-red-500 text-foreground bg-red-500/10'
                                     : hasValue
                                       ? 'border-input focus:ring-primary text-foreground'
                                       : 'border-amber-300 focus:ring-amber-500 text-foreground bg-amber-50 dark:bg-amber-900/10'
@@ -1275,6 +1333,24 @@ export default function NewProductPage() {
                           label: 'Factor',
                           className: 'text-foreground',
                           render: (uom) => uom.conversionToBase
+                        },
+                        {
+                          key: 'uomBarcode',
+                          label: 'Código Barras',
+                          className: 'text-foreground font-mono text-xs',
+                          render: (uom, index) => (
+                            <input
+                              type="text"
+                              value={uom.barcode || ''}
+                              onChange={(e) => {
+                                const newSaleUOMs = [...saleUOMs];
+                                newSaleUOMs[index] = { ...newSaleUOMs[index], barcode: e.target.value };
+                                setSaleUOMs(newSaleUOMs);
+                              }}
+                              className="w-full min-w-[120px] px-2 py-1 border border-input rounded bg-background text-foreground focus:ring-1 focus:ring-primary text-xs"
+                              placeholder="Sin código"
+                            />
+                          )
                         },
                         {
                           key: 'isDefault',

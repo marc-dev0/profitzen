@@ -7,14 +7,14 @@ public class StoreInventory : BaseEntity
     public string TenantId { get; private set; } = string.Empty;
     public Guid ProductId { get; private set; }
     public Guid StoreId { get; private set; }
-    public int CurrentStock { get; private set; }
-    public int MinimumStock { get; private set; }
+    public decimal CurrentStock { get; private set; }
+    public decimal MinimumStock { get; private set; }
 
     public ICollection<InventoryMovement> Movements { get; private set; } = [];
 
     private StoreInventory() { }
 
-    public StoreInventory(string tenantId, Guid productId, Guid storeId, int minimumStock)
+    public StoreInventory(string tenantId, Guid productId, Guid storeId, decimal minimumStock)
     {
         TenantId = tenantId;
         ProductId = productId;
@@ -23,7 +23,7 @@ public class StoreInventory : BaseEntity
         MinimumStock = minimumStock;
     }
 
-    public StoreInventory(string tenantId, Guid storeId, Guid productId, int initialStock, int minimumStock)
+    public StoreInventory(string tenantId, Guid storeId, Guid productId, decimal initialStock, decimal minimumStock)
     {
         TenantId = tenantId;
         StoreId = storeId;
@@ -32,17 +32,17 @@ public class StoreInventory : BaseEntity
         MinimumStock = minimumStock;
     }
 
-    public void UpdateStock(int newStock)
+    public void UpdateStock(decimal newStock)
     {
         CurrentStock = newStock;
     }
 
-    public void AddStock(int quantity)
+    public void AddStock(decimal quantity)
     {
         CurrentStock += quantity;
     }
 
-    public void RemoveStock(int quantity)
+    public void RemoveStock(decimal quantity)
     {
         if (CurrentStock < quantity)
             throw new InvalidOperationException("Insufficient stock");
@@ -52,7 +52,7 @@ public class StoreInventory : BaseEntity
 
     public bool IsLowStock() => CurrentStock <= MinimumStock;
 
-    public void UpdateMinimumStock(int minimumStock)
+    public void UpdateMinimumStock(decimal minimumStock)
     {
         MinimumStock = minimumStock;
     }

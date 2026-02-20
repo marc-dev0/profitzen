@@ -35,7 +35,8 @@ public record PurchaseDetailDto(
     Guid? BonusUOMId,
     string? BonusUOMCode,
     string? BonusUOMName,
-    string? Barcode
+    string? Barcode,
+    DateTime? ExpirationDate = null
 );
 
 public record CreatePurchaseRequest
@@ -56,23 +57,26 @@ public record ProductSearchDto(
     string? CategoryName,
     decimal PurchasePrice,
     decimal SalePrice,
-    int CurrentStock,
+    decimal CurrentStock,
     bool IsActive,
-    int MinimumStock,
+    decimal MinimumStock,
     string? Barcode = null,
     string? ShortScanCode = null,
     decimal UnitCost = 0,
     string? PurchaseUOMName = null,
-    List<ProductSaleUOMDto>? SaleUOMs = null
+    List<ProductSaleUOMDto>? SaleUOMs = null,
+    string? BaseUOMCode = null,
+    bool AllowFractional = false
 );
 
 public record ProductSaleUOMDto(
     Guid UOMId,
     string UOMCode,
     string UOMName,
-    int ConversionToBase,
+    decimal ConversionToBase,
     bool IsDefault,
     decimal Price,
+    string? Barcode = null,
     List<ProductPriceDto>? Prices = null
 );
 
@@ -91,4 +95,5 @@ public record CreatePurchaseDetailRequest
     public decimal UnitPrice { get; init; }
     public decimal? BonusQuantity { get; init; }
     public Guid? BonusUOMId { get; init; }
+    public DateTime? ExpirationDate { get; init; }
 }

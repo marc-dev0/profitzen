@@ -6,6 +6,8 @@ using Profitzen.Product.Infrastructure;
 using Profitzen.Common.Http;
 using System.Text.Json;
 
+using Profitzen.Product.Domain.Entities;
+
 namespace Profitzen.Product.Application.Services;
 
 public class ProductService : IProductService
@@ -86,9 +88,10 @@ public class ProductService : IProductService
                 BaseUOMName = null,
                 AllowFractional = p.AllowFractional,
                 PurchaseConversionMethod = p.PurchaseConversionMethod,
+                HasExpiration = p.HasExpiration, // Added
                 UnitCost = unitCost,  // CRITICAL: Set it here so it's included in the DTO
                 PurchaseUOMId = defaultPurchaseUOM?.UOMId,
-                PurchaseUOMs = p.PurchaseUOMs?.Select(pu => new ProductPurchaseUOMDto
+                PurchaseUOMs = p.PurchaseUOMs?.OrderBy(pu => pu.SortOrder).Select(pu => new ProductPurchaseUOMDto
                 {
                     Id = pu.Id,
                     ProductId = pu.ProductId,
@@ -99,7 +102,7 @@ public class ProductService : IProductService
                     IsDefault = pu.IsDefault,
                     IsActive = pu.IsActive
                 }).ToList() ?? new List<ProductPurchaseUOMDto>(),
-                SaleUOMs = p.SaleUOMs?.Select(su => new ProductSaleUOMDto
+                SaleUOMs = p.SaleUOMs?.OrderBy(su => su.SortOrder).Select(su => new ProductSaleUOMDto
                 {
                     Id = su.Id,
                     ProductId = su.ProductId,
@@ -108,6 +111,7 @@ public class ProductService : IProductService
                     UOMName = string.Empty,
                     ConversionToBase = su.ConversionToBase,
                     Price = su.Price,
+                    Barcode = su.Barcode,
                     IsDefault = su.IsDefault,
                     IsActive = su.IsActive,
                     Prices = su.Prices?.Select(price => new ProductSaleUOMPriceDto
@@ -142,8 +146,11 @@ public class ProductService : IProductService
             await EnrichWithStockDataAsync(products, storeId.Value, tenantId);
         }
         
-        _logger.LogDebug("Enrichment complete");
-
+        _logger.LogDebug("Enrichment complete. Samples:");
+        foreach(var p in products.Take(3)) {
+            _logger.LogInformation("Product: {Name}, BaseUOMId: {Id}, BaseUOMCode: {Code}", p.Name, p.BaseUOMId, p.BaseUOMCode ?? "NULL");
+        }
+        
         return products;
     }
 
@@ -178,8 +185,11 @@ public class ProductService : IProductService
             BaseUOMName = null,
             AllowFractional = product.AllowFractional,
             PurchaseConversionMethod = product.PurchaseConversionMethod,
+            HasExpiration = product.HasExpiration, // Added
             PurchaseUOMId = product.PurchaseUOMs.Where(pu => pu.IsDefault).Select(pu => (Guid?)pu.UOMId).FirstOrDefault(),
-            PurchaseUOMs = product.PurchaseUOMs.Select(pu => new ProductPurchaseUOMDto
+            PurchaseUOMs = product.PurchaseUOMs
+                .OrderBy(pu => pu.SortOrder)
+                .Select(pu => new ProductPurchaseUOMDto
             {
                 Id = pu.Id,
                 ProductId = pu.ProductId,
@@ -190,7 +200,9 @@ public class ProductService : IProductService
                 IsDefault = pu.IsDefault,
                 IsActive = pu.IsActive
             }).ToList(),
-            SaleUOMs = product.SaleUOMs.Select(su => new ProductSaleUOMDto
+            SaleUOMs = product.SaleUOMs
+                .OrderBy(su => su.SortOrder)
+                .Select(su => new ProductSaleUOMDto
             {
                 Id = su.Id,
                 ProductId = su.ProductId,
@@ -199,6 +211,7 @@ public class ProductService : IProductService
                 UOMName = string.Empty,
                 ConversionToBase = su.ConversionToBase,
                 Price = su.Price,
+                Barcode = su.Barcode,
                 IsDefault = su.IsDefault,
                 IsActive = su.IsActive,
                 Prices = su.Prices.Select(p => new ProductSaleUOMPriceDto
@@ -223,26 +236,84 @@ public class ProductService : IProductService
     public async Task<ProductDto?> GetProductByCodeAsync(string code, string tenantId)
     {
         var product = await _context.Products
-            .FirstOrDefaultAsync(p => p.Code == code && p.TenantId == tenantId);
+            .Include(p => p.PurchaseUOMs)
+            .Include(p => p.SaleUOMs)
+                .ThenInclude(su => su.Prices)
+                    .ThenInclude(price => price.PriceList)
+            .FirstOrDefaultAsync(p => 
+                p.TenantId == tenantId && 
+                (p.Code == code || 
+                 p.Barcode == code || 
+                 p.SaleUOMs.Any(su => su.Barcode == code)));
 
         if (product == null) return null;
 
-        return new ProductDto
+        var productDto = new ProductDto
         {
             Id = product.Id,
             Code = product.Code,
+            Barcode = product.Barcode,
+            ShortScanCode = product.ShortScanCode,
             Name = product.Name,
             Description = product.Description,
             ImageUrl = product.ImageUrl,
             CategoryId = product.CategoryId,
-            CategoryName = null,
+            CategoryName = product.CategoryName,
             PurchasePrice = product.PurchasePrice,
             SalePrice = product.SalePrice,
             WholesalePrice = product.WholesalePrice,
             IsActive = product.IsActive,
+            BaseUOMId = product.BaseUOMId,
+            BaseUOMCode = null,
+            BaseUOMName = null,
+            AllowFractional = product.AllowFractional,
+            PurchaseConversionMethod = product.PurchaseConversionMethod,
+            HasExpiration = product.HasExpiration, // Added
+            PurchaseUOMId = product.PurchaseUOMs.Where(pu => pu.IsDefault).Select(pu => (Guid?)pu.UOMId).FirstOrDefault(),
+            PurchaseUOMs = product.PurchaseUOMs
+                .OrderBy(pu => pu.SortOrder)
+                .Select(pu => new ProductPurchaseUOMDto
+            {
+                Id = pu.Id,
+                ProductId = pu.ProductId,
+                UOMId = pu.UOMId,
+                UOMCode = string.Empty,
+                UOMName = string.Empty,
+                ConversionToBase = pu.ConversionToBase,
+                IsDefault = pu.IsDefault,
+                IsActive = pu.IsActive
+            }).ToList(),
+            SaleUOMs = product.SaleUOMs
+                .OrderBy(su => su.SortOrder)
+                .Select(su => new ProductSaleUOMDto
+            {
+                Id = su.Id,
+                ProductId = su.ProductId,
+                UOMId = su.UOMId,
+                UOMCode = string.Empty,
+                UOMName = string.Empty,
+                ConversionToBase = su.ConversionToBase,
+                Price = su.Price,
+                Barcode = su.Barcode,
+                IsDefault = su.IsDefault,
+                IsActive = su.IsActive,
+                Prices = su.Prices.Select(p => new ProductSaleUOMPriceDto
+                {
+                    Id = p.Id,
+                    ProductSaleUOMId = p.ProductSaleUOMId,
+                    PriceListId = p.PriceListId,
+                    PriceListName = p.PriceList.Name,
+                    PriceListCode = p.PriceList.Code,
+                    Price = p.Price
+                }).ToList()
+            }).ToList(),
             CreatedAt = product.CreatedAt,
             UpdatedAt = product.UpdatedAt
         };
+
+        await _enrichmentService.EnrichProductAsync(productDto, product.TenantId);
+
+        return productDto;
     }
 
     public async Task<IEnumerable<ProductDto>> SearchProductsAsync(string searchTerm, string tenantId, Guid storeId, bool includeStock = true)
@@ -257,8 +328,9 @@ public class ProductService : IProductService
                         p.IsActive &&
                         (p.Code.ToLower().Contains(term) ||
                          p.Name.ToLower().Contains(term) ||
-                         (p.Barcode != null && p.Barcode.ToLower().Contains(term)) ||
-                         (p.ShortScanCode != null && p.ShortScanCode.ToLower().Contains(term))))
+                         (p.Barcode != null && (p.Barcode == searchTerm || p.Barcode.ToLower().Contains(term))) ||
+                         (p.ShortScanCode != null && p.ShortScanCode.ToLower().Contains(term)) ||
+                         p.SaleUOMs.Any(su => su.Barcode != null && (su.Barcode == searchTerm || su.Barcode.ToLower().Contains(term)))))
             .Take(20)
             .ToListAsync();
 
@@ -290,11 +362,12 @@ public class ProductService : IProductService
                 BaseUOMId = p.BaseUOMId,
                 AllowFractional = p.AllowFractional,
                 PurchaseConversionMethod = p.PurchaseConversionMethod,
+                HasExpiration = p.HasExpiration, // Added
                 UnitCost = unitCost, // Correctly calculated here
                 PurchaseUOMId = defaultPurchaseUOM?.UOMId,
                 CreatedAt = p.CreatedAt,
                 UpdatedAt = p.UpdatedAt,
-                PurchaseUOMs = p.PurchaseUOMs?.Select(pu => new ProductPurchaseUOMDto
+                PurchaseUOMs = p.PurchaseUOMs?.OrderBy(pu => pu.SortOrder).Select(pu => new ProductPurchaseUOMDto
                 {
                     Id = pu.Id,
                     ProductId = pu.ProductId,
@@ -304,7 +377,7 @@ public class ProductService : IProductService
                     ConversionToBase = pu.ConversionToBase,
                     IsDefault = pu.IsDefault
                 }).ToList() ?? new List<ProductPurchaseUOMDto>(),
-                SaleUOMs = p.SaleUOMs?.Select(su => new ProductSaleUOMDto
+                SaleUOMs = p.SaleUOMs?.OrderBy(su => su.SortOrder).Select(su => new ProductSaleUOMDto
                 {
                     Id = su.Id,
                     ProductId = su.ProductId,
@@ -312,6 +385,7 @@ public class ProductService : IProductService
                     UOMCode = string.Empty,
                     UOMName = string.Empty,
                     ConversionToBase = su.ConversionToBase,
+                    Barcode = su.Barcode,
                     IsDefault = su.IsDefault
                 }).ToList() ?? new List<ProductSaleUOMDto>()
             };
@@ -424,7 +498,8 @@ public class ProductService : IProductService
             request.AllowFractional,
             null,
             request.ShortScanCode,
-            request.PurchaseConversionMethod ?? "base"
+            request.PurchaseConversionMethod ?? "base",
+            request.HasExpiration
         );
 
         if (!string.IsNullOrEmpty(request.ImageUrl))
@@ -435,13 +510,15 @@ public class ProductService : IProductService
         _context.Products.Add(product);
         await _context.SaveChangesAsync();
 
+        int purchaseOrder = 0;
         foreach (var purchaseUOM in request.PurchaseUOMs)
         {
             var productPurchaseUOM = new Domain.Entities.ProductPurchaseUOM(
                 product.Id,
                 purchaseUOM.UOMId,
                 purchaseUOM.ConversionToBase,
-                purchaseUOM.IsDefault
+                purchaseUOM.IsDefault,
+                purchaseOrder++
             );
             _context.ProductPurchaseUOMs.Add(productPurchaseUOM);
         }
@@ -450,6 +527,7 @@ public class ProductService : IProductService
             .Where(pl => pl.TenantId == tenantId && pl.IsActive)
             .ToListAsync();
 
+        int saleOrder = 0;
         foreach (var saleUOM in request.SaleUOMs)
         {
             var productSaleUOM = new Domain.Entities.ProductSaleUOM(
@@ -457,7 +535,9 @@ public class ProductService : IProductService
                 saleUOM.UOMId,
                 saleUOM.ConversionToBase,
                 saleUOM.Price,
-                saleUOM.IsDefault
+                saleUOM.IsDefault,
+                saleUOM.Barcode,
+                saleOrder++
             );
             _context.ProductSaleUOMs.Add(productSaleUOM);
             await _context.SaveChangesAsync();
@@ -589,7 +669,7 @@ public class ProductService : IProductService
         if (product == null)
             throw new InvalidOperationException("Product not found");
 
-        product.Update(request.Name, request.Description ?? string.Empty, request.CategoryId, null, request.PurchaseConversionMethod);
+        product.Update(request.Name, request.Description ?? string.Empty, request.CategoryId, null, request.PurchaseConversionMethod, request.HasExpiration);
         product.UpdatePrices(request.PurchasePrice, request.SalePrice, request.WholesalePrice);
 
         if (!string.IsNullOrEmpty(request.Code))
@@ -629,13 +709,15 @@ public class ProductService : IProductService
                 _context.ProductPurchaseUOMs.Remove(existingUOM);
             }
 
+            int purchaseOrder = 0;
             foreach (var purchaseUOMRequest in request.PurchaseUOMs)
             {
                 var purchaseUOM = new Domain.Entities.ProductPurchaseUOM(
                     product.Id,
                     purchaseUOMRequest.UOMId,
                     purchaseUOMRequest.ConversionToBase,
-                    purchaseUOMRequest.IsDefault
+                    purchaseUOMRequest.IsDefault,
+                    purchaseOrder++
                 );
                 _context.ProductPurchaseUOMs.Add(purchaseUOM);
             }
@@ -658,6 +740,7 @@ public class ProductService : IProductService
                 .Where(pl => pl.TenantId == product.TenantId && pl.IsActive)
                 .ToListAsync();
 
+            int saleOrder = 0;
             foreach (var saleUOMRequest in request.SaleUOMs)
             {
                 var saleUOM = new Domain.Entities.ProductSaleUOM(
@@ -665,7 +748,9 @@ public class ProductService : IProductService
                     saleUOMRequest.UOMId,
                     saleUOMRequest.ConversionToBase,
                     0,
-                    saleUOMRequest.IsDefault
+                    saleUOMRequest.IsDefault,
+                    saleUOMRequest.Barcode,
+                    saleOrder++
                 );
                 _context.ProductSaleUOMs.Add(saleUOM);
 

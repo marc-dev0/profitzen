@@ -35,6 +35,7 @@ public class ProductDbContext : DbContext
             entity.Property(e => e.WholesalePrice).HasPrecision(18, 2);
             entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
             entity.Property(e => e.PurchaseConversionMethod).HasMaxLength(20).IsRequired().HasDefaultValue("base");
+            entity.Property(e => e.HasExpiration).IsRequired().HasDefaultValue(false);
 
             entity.HasMany(e => e.UOMConversions)
                   .WithOne(c => c.Product)
@@ -111,6 +112,7 @@ public class ProductDbContext : DbContext
 
             entity.Property(e => e.ConversionToBase).HasPrecision(18, 6).IsRequired();
             entity.Property(e => e.Price).HasPrecision(18, 2).IsRequired();
+            entity.Property(e => e.Barcode).HasMaxLength(50);
 
             entity.HasOne(e => e.Product)
                   .WithMany(p => p.SaleUOMs)
@@ -119,6 +121,7 @@ public class ProductDbContext : DbContext
 
             entity.HasIndex(e => new { e.ProductId, e.UOMId }).IsUnique();
             entity.HasIndex(e => e.ProductId);
+            entity.HasIndex(e => e.Barcode);
             entity.HasIndex(e => e.IsDefault);
             entity.HasIndex(e => e.IsActive);
 

@@ -34,6 +34,7 @@ $services = @(
     @{Name="Product"; Port=5005; Path="src\Services\Product"},
     @{Name="Customer"; Port=5006; Path="src\Services\Customer"},
     @{Name="Configuration"; Port=5007; Path="src\Services\Configuration"},
+    @{Name="PaymentMethods"; Port=5008; Path="src\Services\PaymentMethods"},
     @{Name="Analytics"; Port=5004; Path="src\Services\Analytics"},
     @{Name="API Gateway"; Port=8000; Path="src\ApiGateway"}
 )
@@ -56,6 +57,7 @@ Write-Host "  Sales          -> http://localhost:5002" -ForegroundColor White
 Write-Host "  Product        -> http://localhost:5005" -ForegroundColor White
 Write-Host "  Customer       -> http://localhost:5006" -ForegroundColor White
 Write-Host "  Configuration  -> http://localhost:5007" -ForegroundColor White
+Write-Host "  PaymentMethods -> http://localhost:5008" -ForegroundColor White
 Write-Host "  API Gateway    -> http://localhost:8000" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Database: profitzen_demo" -ForegroundColor Yellow

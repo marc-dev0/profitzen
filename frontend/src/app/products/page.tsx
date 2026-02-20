@@ -120,7 +120,7 @@ export default function ProductsPage() {
                 }`}>
                 {stock}
               </span>
-              <span className="text-[10px] text-muted-foreground font-medium px-1 bg-muted rounded border border-border/50 uppercase">UND (Base)</span>
+              <span className="text-[10px] text-muted-foreground font-medium px-1 bg-muted rounded border border-border/50 uppercase">{product.baseUOMCode || 'UND'} (Base)</span>
             </div>
 
             {/* UOM Breakdown */}

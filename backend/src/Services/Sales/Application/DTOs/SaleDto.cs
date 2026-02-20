@@ -22,6 +22,9 @@ public record SaleDto(
     bool IsFullyPaid,
     List<SaleItemDto> Items,
     List<PaymentDto> Payments,
+    decimal AmountReceived = 0,
+    decimal ChangeAmount = 0,
+    decimal RoundingAdjustment = 0,
     string? DocumentType = null,
     string? DocumentSeries = null,
     string? DocumentNumber = null
@@ -32,10 +35,12 @@ public record SaleItemDto(
     Guid ProductId,
     string ProductName,
     string ProductCode,
-    int Quantity,
+    decimal Quantity,
     decimal UnitPrice,
     decimal DiscountAmount,
-    decimal Subtotal
+    decimal Subtotal,
+    string? UOMCode = null,
+    decimal ConversionToBase = 1
 );
 
 public record PaymentDto(
@@ -59,7 +64,7 @@ public record AddSaleItemRequest(
     Guid ProductId,
     string ProductName,
     string ProductCode,
-    int Quantity,
+    decimal Quantity,
     decimal UnitPrice,
     decimal DiscountAmount = 0,
     decimal ConversionToBase = 1,
@@ -68,7 +73,7 @@ public record AddSaleItemRequest(
 );
 
 public record UpdateSaleItemRequest(
-    int Quantity,
+    decimal Quantity,
     decimal DiscountAmount = 0
 );
 
@@ -80,6 +85,14 @@ public record AddPaymentRequest(
 
 public record ApplyDiscountRequest(
     decimal DiscountAmount
+);
+
+public record CompleteSaleRequest(
+    string? CacheKey = null,
+    decimal? AmountReceived = null,
+    string? DocumentSeries = null,
+    string? DocumentNumber = null,
+    decimal RoundingAdjustment = 0
 );
 
 public record TicketSettingsDto(
@@ -124,8 +137,8 @@ public record LowStockAlertDto(
     Guid ProductId,
     string ProductCode,
     string ProductName,
-    int CurrentStock,
-    int MinimumStock,
+    decimal CurrentStock,
+    decimal MinimumStock,
     string Severity
 );
 
@@ -134,7 +147,7 @@ public record TopProductDto(
     Guid ProductId,
     string ProductCode,
     string ProductName,
-    int TotalSold,
+    decimal TotalSold,
     decimal TotalRevenue,
     string? UnitOfMeasure = null
 );

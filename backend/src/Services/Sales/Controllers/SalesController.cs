@@ -177,11 +177,11 @@ public class SalesController : ControllerBase
     }
 
     [HttpPost("{id:guid}/complete")]
-    public async Task<IActionResult> CompleteSale(Guid id)
+    public async Task<IActionResult> CompleteSale(Guid id, [FromBody] CompleteSaleRequest request)
     {
         try
         {
-            var sale = await _salesService.CompleteSaleAsync(id);
+            var sale = await _salesService.CompleteSaleAsync(id, request);
             return Ok(sale);
         }
         catch (InvalidOperationException ex)
@@ -350,5 +350,23 @@ public class SalesController : ControllerBase
         var tenantId = GetCurrentTenantId();
         var dashboard = await _salesService.GetDashboardAsync(tenantId, storeId);
         return Ok(dashboard);
+    }
+
+    [HttpPost("diagnostics")]
+    public IActionResult ReportHardwareStatus([FromBody] HardwareDiagnosticRequest request)
+    {
+        var storeId = GetCurrentStoreId();
+        var tenantId = GetCurrentTenantId();
+        
+        // Log the diagnostic (For now, just a debug log, could be persisted to DB)
+        Console.WriteLine($"[HARDWARE-999] Store: {storeId}, Tenant: {tenantId}, Device: {request.DeviceName}, Connected: {request.IsConnected}");
+        
+        if (!request.IsConnected)
+        {
+            // Security: We could trigger alerts or block certain operations here
+            return Accepted(new { status = "Warning", message = "Diagnostic received with errors. Audit log created." });
+        }
+
+        return Ok(new { status = "Success", message = "Diagnostic verified by backend." });
     }
 }

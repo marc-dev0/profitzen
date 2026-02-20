@@ -14,7 +14,7 @@ public interface ISalesService
     Task<SaleDto> UpdateSaleItemAsync(Guid saleId, Guid productId, UpdateSaleItemRequest request);
     Task<SaleDto> ApplyDiscountAsync(Guid saleId, ApplyDiscountRequest request);
     Task<SaleDto> AddPaymentAsync(Guid saleId, AddPaymentRequest request);
-    Task<SaleDto> CompleteSaleAsync(Guid saleId);
+    Task<SaleDto> CompleteSaleAsync(Guid saleId, CompleteSaleRequest request);
     // Task<SaleDto> CancelSaleAsync(Guid saleId); // Removed - Cancelled status no longer used
     Task<SaleDto> ReturnSaleAsync(Guid saleId);
     Task<byte[]> GetTicketPdfAsync(Guid saleId, TicketSettingsDto settings);

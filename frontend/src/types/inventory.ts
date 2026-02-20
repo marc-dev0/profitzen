@@ -27,6 +27,7 @@ export interface Product {
   purchaseConversionMethod?: string;
   saleUOMs?: ProductSaleUOM[];
   purchaseUOMs?: ProductPurchaseUOM[];
+  hasExpiration: boolean;
   createdAt: string;
 }
 
@@ -92,6 +93,7 @@ export interface PurchaseDetail {
   bonusUOMCode?: string;
   bonusUOMName?: string;
   barcode?: string;
+  expirationDate?: string;
 }
 
 export interface Purchase {
@@ -119,6 +121,7 @@ export interface CreatePurchaseDetailRequest {
   unitPrice: number;
   bonusQuantity?: number;
   bonusUOMId?: string;
+  expirationDate?: string;
 }
 
 export interface CreatePurchaseRequest {
@@ -173,8 +176,9 @@ export interface ProductSearchResult {
   baseUOMId?: string;
   baseUOMCode?: string;
   baseUOMName?: string;
-  purchaseUOMs?: ProductPurchaseUOM[];
-  saleUOMs?: ProductSaleUOM[];
+  saleUOMs?: (ProductSaleUOM & { barcode?: string })[];
+  hasExpiration: boolean;
+  allowFractional: boolean;
 }
 
 export interface ProductPurchaseUOM {
@@ -195,6 +199,7 @@ export interface ProductSaleUOM {
   uomName: string;
   conversionToBase: number;
   price: number;
+  barcode?: string;
   isDefault: boolean;
   isActive?: boolean;
   prices?: ProductSaleUOMPrice[];

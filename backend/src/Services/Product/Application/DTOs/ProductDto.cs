@@ -20,8 +20,8 @@ public record ProductDto
     public bool AllowFractional { get; init; }
     public string? PurchaseConversionMethod { get; init; }
     public decimal? UnitCost { get; set; }
-    public int? CurrentStock { get; set; }
-    public int? MinimumStock { get; set; }
+    public decimal? CurrentStock { get; set; }
+    public decimal? MinimumStock { get; set; }
     public Guid? PurchaseUOMId { get; set; }
     public string? PurchaseUOMCode { get; set; }
     public string? PurchaseUOMName { get; set; }
@@ -30,6 +30,7 @@ public record ProductDto
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
     public string? ShortScanCode { get; init; }  // Last 6 chars of code/barcode for quick scanning
+    public bool HasExpiration { get; init; }
 }
 
 public record CreateProductRequest
@@ -47,6 +48,7 @@ public record CreateProductRequest
     public Guid? BaseUOMId { get; init; }
     public bool AllowFractional { get; init; }
     public string? PurchaseConversionMethod { get; init; }
+    public bool HasExpiration { get; init; }
     public List<CreateProductPurchaseUOMRequest> PurchaseUOMs { get; init; } = new();
     public List<CreateProductSaleUOMRequest> SaleUOMs { get; init; } = new();
 }
@@ -63,6 +65,7 @@ public record UpdateProductRequest
     public Guid BaseUOMId { get; init; }
     public bool AllowFractional { get; init; }
     public string? PurchaseConversionMethod { get; init; }
+    public bool? HasExpiration { get; init; }
     public decimal PurchasePrice { get; init; }
     public decimal SalePrice { get; init; }
     public decimal WholesalePrice { get; init; }
@@ -82,6 +85,7 @@ public record UpdateProductSaleUOMRequest
 {
     public Guid UOMId { get; init; }
     public decimal ConversionToBase { get; init; }
+    public string? Barcode { get; init; }
     public bool IsDefault { get; init; }
     public List<PriceByListRequest> PricesByList { get; init; } = new();
 }
@@ -138,6 +142,7 @@ public record ProductSaleUOMDto
     public string UOMName { get; set; } = string.Empty;
     public decimal ConversionToBase { get; init; }
     public decimal Price { get; init; }
+    public string? Barcode { get; init; }
     public bool IsDefault { get; init; }
     public bool IsActive { get; init; }
     public List<ProductSaleUOMPriceDto> Prices { get; set; } = new();
@@ -155,6 +160,7 @@ public record CreateProductSaleUOMRequest
     public Guid UOMId { get; init; }
     public decimal ConversionToBase { get; init; }
     public decimal Price { get; init; }
+    public string? Barcode { get; init; }
     public bool IsDefault { get; init; }
     public List<PriceByListRequest> PricesByList { get; init; } = new();
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
@@ -12,6 +12,7 @@ import apiClient from '@/lib/axios';
 import type { CartItem, SaleRequest } from '@/types/sales';
 import type { Product } from '@/types/inventory';
 import { BusinessConfig } from '@/config/business.config';
+import { usePaymentMethods, calculateChangeLocal, calculateChangeServer, type CalculateChangeResponse, type PaymentMethodConfig as PMConfig } from '@/hooks/usePaymentMethods';
 const printTicketFromBackend = async (
   saleId: string,
   settings: {
@@ -55,7 +56,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { useCashShift } from '@/hooks/useCashShift';
 import { CashControl } from '@/components/CashControl/CashControl';
-import { Lock } from 'lucide-react';
+import { Lock, AlertTriangle } from 'lucide-react';
 
 import type { ProductSaleUOM } from '@/types/inventory';
 
@@ -103,6 +104,7 @@ export default function POSPage() {
   const { customers, isLoading: isLoadingCustomers, refresh: refreshCustomers } = useCustomers(); // Use customers hook
   const { data: priceLists, isLoading: isLoadingPriceLists } = usePriceLists();
   const { data: companySettings } = useCompanySettings();
+  const { data: paymentMethods } = usePaymentMethods();
 
   // Cash Shift Status
   const { data: openShift, isLoading: isLoadingShift } = useCashShift(user?.currentStoreId);
@@ -118,11 +120,103 @@ export default function POSPage() {
   const [showProductGrid, setShowProductGrid] = useState(false);
   const [lastSale, setLastSale] = useState<any>(null);
   const [selectedPriceList, setSelectedPriceList] = useState('');
+  const [isScaleConnecting, setIsScaleConnecting] = useState(false);
+  const [scaleWeight, setScaleWeight] = useState<number | null>(null);
+
+  // Diagnostic Status (Transactor 999 style)
+  const [hwStatus, setHwStatus] = useState({
+    scale: { connected: false, required: true, loading: true },
+    printer: { connected: false, required: true, loading: false, lastTest: null as string | null },
+    internet: { connected: true, loading: false }
+  });
 
   // Keyboard navigation states
   const [selectedProductIndex, setSelectedProductIndex] = useState(0);
   const [selectedCartIndex, setSelectedCartIndex] = useState(0);
   const [focusMode, setFocusMode] = useState<'search' | 'products' | 'cart' | 'payment'>('search');
+
+  // Local states for inputs to allow decimals (0.5, 0.75)
+  const [rawAmountReceived, setRawAmountReceived] = useState('0.00');
+  const [rawQuantities, setRawQuantities] = useState<Record<string, string>>({});
+  const [changeResult, setChangeResult] = useState<CalculateChangeResponse | null>(null);
+
+  // Old shift warning
+  const [showOldShiftWarning, setShowOldShiftWarning] = useState(false);
+
+  // Weight Entry Modal States
+  const [isWeightModalOpen, setIsWeightModalOpen] = useState(false);
+  const [weightModalProduct, setWeightModalProduct] = useState<Product | null>(null);
+  const [modalWeight, setModalWeight] = useState<string>('');
+  const [modalUomId, setModalUomId] = useState<string>('');
+  const weightInputRef = useRef<HTMLInputElement>(null);
+
+  const openWeightModal = (product: Product, uomId?: string) => {
+    setWeightModalProduct(product);
+    setModalUomId(uomId || getDefaultSaleUOM(product)?.uomId || '');
+    setModalWeight('');
+    setIsWeightModalOpen(true);
+    // Focus after dialog animation
+    setTimeout(() => weightInputRef.current?.focus(), 200);
+  };
+
+  const parseModalWeight = (val: string): number => {
+    let clean = val.replace(',', '.').toLowerCase().trim();
+    let num = parseFloat(clean);
+    if (isNaN(num)) return 0;
+    // Gram support: if it's explicitly grams, divide by 1000
+    if (clean.endsWith('g') || clean.endsWith('gr')) return num / 1000;
+    return num;
+  };
+
+  const handleAddWeightToCart = () => {
+    if (!weightModalProduct || !modalWeight) return;
+
+    let parsed = parseModalWeight(modalWeight);
+
+    if (parsed > 0) {
+      addToCart(weightModalProduct.id, parsed, modalUomId);
+      setIsWeightModalOpen(false);
+      setWeightModalProduct(null);
+      setModalWeight('');
+      setSearchTerm('');
+    } else {
+      toast.error('Ingrese un peso válido');
+    }
+  };
+
+  // Real-time authoritative change calculation from 'Medios' service
+  useEffect(() => {
+    const fetchChange = async () => {
+      const received = parseFloat(amountReceived);
+      const total = calculateTotal();
+      const selectedMethodConfig = paymentMethods?.find(m => m.name === paymentMethod);
+
+      if (isNaN(received) || total <= 0) {
+        setChangeResult(null);
+        return;
+      }
+
+      try {
+        const result = await calculateChangeServer({
+          totalAmount: total,
+          amountReceived: received,
+          appliesRounding: selectedMethodConfig?.appliesRounding ?? false
+        });
+        setChangeResult(result);
+      } catch (err) {
+        // Fallback to local if server fails (silent)
+        setChangeResult(calculateChangeLocal(total, received, selectedMethodConfig?.appliesRounding ?? false));
+      }
+    };
+
+    const timeout = setTimeout(fetchChange, 150); // Small debounce
+    return () => clearTimeout(timeout);
+  }, [amountReceived, cart, paymentMethod, paymentMethods]);
+
+  // Reset selection index when search term changes
+  useEffect(() => {
+    setSelectedProductIndex(0);
+  }, [searchTerm]);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const paymentMethodRef = useRef<HTMLSelectElement>(null);
@@ -149,6 +243,26 @@ export default function POSPage() {
     creditLimit: 0
   });
 
+  // Check for shifts from previous days
+  useEffect(() => {
+    if (openShift && openShift.startTime) {
+      const shiftDate = new Date(openShift.startTime);
+      const today = new Date();
+
+      // Compare dates (ignoring time)
+      const isDifferentDay =
+        shiftDate.getDate() !== today.getDate() ||
+        shiftDate.getMonth() !== today.getMonth() ||
+        shiftDate.getFullYear() !== today.getFullYear();
+
+      if (isDifferentDay) {
+        setShowOldShiftWarning(true);
+      } else {
+        setShowOldShiftWarning(false);
+      }
+    }
+  }, [openShift]);
+
   // Set default price list when data loads
   useEffect(() => {
     if (priceLists && priceLists.length > 0 && !selectedPriceList) {
@@ -158,25 +272,103 @@ export default function POSPage() {
   }, [priceLists, selectedPriceList]);
 
   useEffect(() => {
+    const runDiagnostics = async () => {
+      console.log('--- SYSTEM CHECK 999 ---');
+
+      // Check Scale
+      if ('serial' in navigator) {
+        // @ts-ignore
+        const ports = await navigator.serial.getPorts();
+        setHwStatus(prev => ({
+          ...prev,
+          scale: { ...prev.scale, connected: ports.length > 0, loading: false }
+        }));
+      } else {
+        setHwStatus(prev => ({
+          ...prev,
+          scale: { ...prev.scale, connected: false, loading: false }
+        }));
+      }
+
+      // Check Internet
+      const isOnline = navigator.onLine;
+      setHwStatus(prev => ({
+        ...prev,
+        internet: { connected: isOnline, loading: false }
+      }));
+
+      try {
+        // @ts-ignore
+        const ports = 'serial' in navigator ? await navigator.serial.getPorts() : [];
+        await apiClient.post('/api/sales/diagnostics', {
+          deviceName: 'Balanza',
+          isConnected: ports.length > 0,
+          errorMessage: ports.length === 0 ? 'No se detectaron puertos seriales activos' : null
+        });
+
+        await apiClient.post('/api/sales/diagnostics', {
+          deviceName: 'Internet',
+          isConnected: isOnline
+        });
+      } catch (err) {
+        console.warn('No se pudo enviar el reporte de diagnóstico al backend.');
+      }
+    };
+
+    runDiagnostics();
+    window.addEventListener('online', () => setHwStatus(p => ({ ...p, internet: { ...p.internet, connected: true } })));
+    window.addEventListener('offline', () => setHwStatus(p => ({ ...p, internet: { ...p.internet, connected: false } })));
+  }, []);
+
+  useEffect(() => {
     if (_hasHydrated && !isAuthenticated) {
       router.push('/login');
     }
   }, [isAuthenticated, _hasHydrated, router]);
 
-  // Refresh customer data when a customer is selected
   useEffect(() => {
     if (selectedCustomerId) {
       refreshCustomers();
     }
   }, [selectedCustomerId]);
 
-  // Calculate filtered products (needed for keyboard navigation)
+  const { searchTermToFilter, quantityToAddFromSearch } = useMemo(() => {
+    if (!searchTerm.trim()) return { searchTermToFilter: '', quantityToAddFromSearch: 1 };
+
+    let quantityToAdd = 1;
+    let actualSearchTerm = searchTerm;
+
+    if (searchTerm.includes('*')) {
+      const parts = searchTerm.split('*');
+      let qtyPart = parts[0].trim().toLowerCase();
+      let qty = parseFloat(qtyPart);
+
+      if (qtyPart.endsWith('g') || qtyPart.endsWith('gr')) {
+        qty = qty / 1000;
+      }
+
+      if (!isNaN(qty) && qty > 0) {
+        quantityToAdd = qty;
+        actualSearchTerm = parts[1]?.trim() || '';
+      }
+    } else if (searchTerm.toLowerCase().includes('x')) {
+      const parts = searchTerm.split(/x/i);
+      const qty = parseFloat(parts[0]);
+      if (!isNaN(qty) && qty > 0 && parts[1] !== undefined) {
+        quantityToAdd = qty;
+        actualSearchTerm = parts[1]?.trim() || '';
+      }
+    }
+    return { searchTermToFilter: actualSearchTerm, quantityToAddFromSearch: quantityToAdd };
+  }, [searchTerm]);
+
   const filteredProducts = products?.filter((product) =>
     product.isActive && (
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (product.barcode && product.barcode.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (product.shortScanCode && product.shortScanCode.toLowerCase().includes(searchTerm.toLowerCase()))
+      product.name.toLowerCase().includes(searchTermToFilter.toLowerCase()) ||
+      product.code.toLowerCase().includes(searchTermToFilter.toLowerCase()) ||
+      (product.barcode && product.barcode.toLowerCase().includes(searchTermToFilter.toLowerCase())) ||
+      (product.shortScanCode && product.shortScanCode.toLowerCase().includes(searchTermToFilter.toLowerCase())) ||
+      product.saleUOMs?.some(u => u.barcode && u.barcode.toLowerCase().includes(searchTermToFilter.toLowerCase()))
     )
   );
 
@@ -269,10 +461,18 @@ export default function POSPage() {
         }
 
         if (e.key === 'Enter' && filteredProducts && filteredProducts[selectedProductIndex]) {
+          // If we are in the search input, let its local handler deal with it (Priority 1: exact match)
+          if (document.activeElement === searchInputRef.current) return;
+
           e.preventDefault();
           if (!searchTerm.trim()) return;
 
-          addToCart(filteredProducts[selectedProductIndex].id, 1);
+          const p = filteredProducts[selectedProductIndex];
+          if (p.allowFractional && quantityToAddFromSearch === 1) {
+            openWeightModal(p);
+          } else {
+            addToCart(p.id, quantityToAddFromSearch);
+          }
           setSelectedProductIndex(0);
         }
 
@@ -414,18 +614,24 @@ export default function POSPage() {
     }
 
     // 3. SMART FALLBACK: If default UOM is not enough for even 1 unit, find the largest UOM that DOES have stock
-    let availableInSelected = Math.floor(availableStockBase / conversionToBase);
+    // If fractional is allowed, we don't floor for the base units check
+    let availableInSelected = (product.allowFractional || conversionToBase > 1)
+      ? availableStockBase / conversionToBase
+      : Math.floor(availableStockBase / conversionToBase);
 
-    if (availableInSelected <= 0) {
+    if (availableInSelected <= 0.001) { // Use small epsilon for decimal precision
       const betterUOM = product.saleUOMs
         ?.filter(u => u.isActive !== false)
         .sort((a, b) => b.conversionToBase - a.conversionToBase)
-        .find(u => Math.floor(availableStockBase / (u.conversionToBase || 1)) > 0);
+        .find(u => {
+          const avail = availableStockBase / (u.conversionToBase || 1);
+          return product.allowFractional ? avail > 0.001 : Math.floor(avail) > 0;
+        });
 
       if (betterUOM) {
         targetUOM = betterUOM;
         conversionToBase = targetUOM.conversionToBase || 1;
-        availableInSelected = Math.floor(availableStockBase / conversionToBase);
+        availableInSelected = availableStockBase / conversionToBase;
         toast.info(`Se cambió a ${targetUOM.uomName} por disponibilidad de stock.`);
       } else {
         toast.error(`No hay stock suficiente para la unidad de medida disponible.`);
@@ -435,10 +641,15 @@ export default function POSPage() {
 
     // 4. Quantity Adjustment: Don't exceed available stock
     let finalQuantityToAdd = requestedQuantity;
-    if (availableStockBase < (finalQuantityToAdd * conversionToBase)) {
-      finalQuantityToAdd = Math.floor(availableStockBase / conversionToBase);
+    const requestedBaseQty = finalQuantityToAdd * conversionToBase;
+
+    if (availableStockBase < requestedBaseQty - 0.0001) {
+      // If it's a fractional sale (like grams/scale), we allow precision
+      const possibleQty = availableStockBase / conversionToBase;
+      finalQuantityToAdd = product.allowFractional ? possibleQty : Math.floor(possibleQty);
+
       if (finalQuantityToAdd > 0) {
-        toast.warning(`Stock insuficiente. Solo se agregaron ${finalQuantityToAdd} ${targetUOM?.uomName}.`);
+        toast.warning(`Stock insuficiente. Solo se agregaron ${finalQuantityToAdd.toFixed(3)} ${targetUOM?.uomName}.`);
       }
     }
 
@@ -447,6 +658,45 @@ export default function POSPage() {
     // 5. Finalize adding to cart
     const price = getProductPrice(product, selectedPriceList, targetUOM?.uomId);
 
+    // Add logic for Scale Connection
+    const connectToScale = async (pId: string, uId: string) => {
+      if (!('serial' in navigator)) {
+        toast.error('Tu navegador no soporta conexión con balanzas. Usa Chrome o Edge.');
+        return;
+      }
+      try {
+        setIsScaleConnecting(true);
+        // @ts-ignore
+        const port = await (navigator as any).serial.requestPort();
+        await port.open({ baudRate: 9600 });
+        const decoder = new TextDecoderStream();
+        port.readable.pipeTo(decoder.writable);
+        const reader = decoder.readable.getReader();
+        let rawData = '';
+        const timeout = setTimeout(() => reader.cancel(), 3000);
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          rawData += value;
+          const weightMatch = rawData.match(/[-+]?[0-9]*\.?[0-9]+/);
+          if (weightMatch) {
+            const weight = parseFloat(weightMatch[0]);
+            if (!isNaN(weight) && weight > 0) {
+              addToCart(pId, weight, uId);
+              break;
+            }
+          }
+        }
+        await reader.releaseLock();
+        await port.close();
+        clearTimeout(timeout);
+      } catch (err) {
+        console.error(err);
+      } finally { setIsScaleConnecting(false); }
+    };
+    (window as any).connectToScale = connectToScale;
+
+
     const existingItemIndex = cart.findIndex(item => item.productId === productId && item.uomId === targetUOM?.uomId);
     const existingItem = existingItemIndex !== -1 ? cart[existingItemIndex] : undefined;
 
@@ -454,7 +704,7 @@ export default function POSPage() {
       const newQuantity = existingItem.quantity + finalQuantityToAdd;
       setCart(cart.map((item, idx) =>
         idx === existingItemIndex
-          ? { ...item, quantity: newQuantity, subtotal: newQuantity * item.price }
+          ? { ...item, quantity: newQuantity, subtotal: Math.round(newQuantity * item.price * 100) / 100 }
           : item
       ));
     } else {
@@ -464,7 +714,7 @@ export default function POSPage() {
         productName: product.name,
         quantity: finalQuantityToAdd,
         price: price,
-        subtotal: price * finalQuantityToAdd,
+        subtotal: Math.round(price * finalQuantityToAdd * 100) / 100,
         conversionToBase: conversionToBase,
         uomId: targetUOM?.uomId || '',
         uomCode: targetUOM?.uomCode || 'UND',
@@ -529,7 +779,7 @@ export default function POSPage() {
     ));
   };
 
-  const updateQuantity = (productId: string, uomId: string, newQuantity: number) => {
+  const updateQuantity = (productId: string, uomId: string, newQuantity: number, isBlur = false) => {
     // We allow 0 quantity to support the "empty input" state in the UI
     if (newQuantity < 0) return;
 
@@ -552,15 +802,26 @@ export default function POSPage() {
     const totalStockNeeded = stockUsedByOthers + thisItemStockNeeded;
     const currentStock = product.currentStock || 0;
 
-    if (currentStock < totalStockNeeded) {
-      const availableInThisUOM = Math.floor((currentStock - stockUsedByOthers) / item.conversionToBase);
-      toast.warning(`Stock insuficiente. Solo quedan ${availableInThisUOM} ${item.uomName} disponibles.`);
+    const isExceeded = currentStock < totalStockNeeded - 0.0001;
+    // Lenicencia temporal si es fraccionario y parece que están escribiendo gramos (ej: escribieron 200 pero falta la 'g')
+    const isTypingGrams = !isBlur && product.allowFractional && isExceeded && (newQuantity / 1000 <= currentStock + 0.01);
+
+    if (isExceeded && !isTypingGrams) {
+      const availableInThisUOM = (product.allowFractional)
+        ? (currentStock - stockUsedByOthers) / item.conversionToBase
+        : Math.floor((currentStock - stockUsedByOthers) / item.conversionToBase);
+
+      const displayQty = (product.allowFractional || availableInThisUOM % 1 !== 0)
+        ? availableInThisUOM.toFixed(3)
+        : availableInThisUOM.toString();
+
+      toast.warning(`Stock insuficiente. Solo quedan ${displayQty} ${item.uomName} disponibles.`);
       return;
     }
 
     setCart(cart.map((cartItem, idx) =>
       idx === itemIndex
-        ? { ...cartItem, quantity: newQuantity, subtotal: newQuantity * cartItem.price }
+        ? { ...cartItem, quantity: newQuantity, subtotal: Math.round(newQuantity * cartItem.price * 100) / 100 }
         : cartItem
     ));
   };
@@ -592,30 +853,26 @@ export default function POSPage() {
     return calculateTotal() * BusinessConfig.tax.igvRate;
   };
 
-  const calculateChange = () => {
-    const received = parseFloat(amountReceived) || 0;
-    const total = calculateTotal();
-    return received - total;
-  };
+
 
   const isPaymentValid = () => {
-    if (paymentMethod === 'Crédito') {
+    const selectedMethodConfig = paymentMethods?.find(m => m.name === paymentMethod);
+
+    if (selectedMethodConfig?.generatesDebt) {
       if (!selectedCustomer) return false;
       const total = calculateTotal();
-      // Check if customer has enough credit
-      // Note: availableCredit in DTO is (Limit - Debt).
       return selectedCustomer.availableCredit >= total;
     }
-    if (paymentMethod !== 'Efectivo') return true;
-    const received = parseFloat(amountReceived) || 0;
-    return received >= calculateTotal();
+    if (!selectedMethodConfig?.requiresAmountReceived) return true;
+    return changeResult?.isPaymentSufficient ?? false;
   };
 
   // Keyboard navigation handlers
   const handlePaymentMethodKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (paymentMethod === 'Efectivo') {
+      const selectedMethodConfig = paymentMethods?.find(m => m.name === paymentMethod);
+      if (selectedMethodConfig?.requiresAmountReceived) {
         amountReceivedRef.current?.focus();
         amountReceivedRef.current?.select();
       } else {
@@ -678,7 +935,7 @@ export default function POSPage() {
         documentType: documentType,
         items: cart.map(item => ({
           productId: item.productId,
-          productName: `${item.productName}${item.uomName ? ` (${item.uomName})` : ''}`,
+          productName: item.productName,
           productCode: item.productCode,
           quantity: item.quantity,
           unitPrice: item.price,
@@ -697,8 +954,37 @@ export default function POSPage() {
       const createResponse = await apiClient.post('/api/sales', payload);
       const saleWithId = createResponse.data;
 
-      // Final Step: Complete the sale (this handles stock and document numbers)
-      const completedSale = await apiClient.post(`/api/sales/${saleWithId.id}/complete`);
+      // NEW: Call Medios to calculate everything and get cacheKey
+      const calculationPayload = {
+        items: cart.map(item => ({
+          productId: item.productId,
+          productName: item.productName,
+          productCode: item.productCode,
+          quantity: item.quantity,
+          unitPrice: item.price,
+          discountAmount: 0,
+          conversionToBase: item.conversionToBase,
+          uomId: item.uomId || null,
+          uomCode: item.uomCode || null
+        })),
+        amountReceived: parseFloat(rawAmountReceived),
+        paymentMethodId: (selectedMethod?.id || '').toString()
+      };
+
+      const calculationResponse = await apiClient.post('/api/paymentmethods/calculate-sale', calculationPayload);
+      const calculation = calculationResponse.data;
+
+      console.log('✅ Medios calculation:', calculation);
+
+      // Complete sale using the cacheKey from Medios
+      console.log('📤 Completing sale with cacheKey:', calculation.cacheKey);
+      const completedSale = await apiClient.post(`/api/sales/${saleWithId.id}/complete`, {
+        cacheKey: calculation.cacheKey,
+        amountReceived: calculation.amountReceived,
+        roundingAdjustment: calculation.roundingAdjustment
+      });
+
+      console.log('✅ Sale completed:', completedSale.data.id);
 
       const saleData = {
         ...completedSale.data,
@@ -710,37 +996,49 @@ export default function POSPage() {
 
       setLastSale(saleData);
 
-      // Auto-print ticket
+      console.log('🖨️ Printing ticket...');
       await printTicketFromBackend(completedSale.data.id, {
         storeName: companySettings?.tradeName || companySettings?.companyName || "Mi Tienda",
         storeAddress: companySettings?.address || "Av. Principal 123, Lima",
         storePhone: companySettings?.phone || "(01) 123-4567",
         storeRuc: companySettings?.ruc || "20123456789",
         headerText: companySettings?.ticketHeader || '',
-        footerText: companySettings?.ticketFooter || '¡Gracias por su compra!\nVuelva pronto',
+        footerText: companySettings?.ticketFooter || '¡Gracias por su compra!\\nVuelva pronto',
         logoUrl: companySettings?.logoUrl,
         showLogo: companySettings?.showLogo ?? true,
         ticketWidth: companySettings?.ticketWidth || 80,
         cashierName: user?.fullName || user?.email || 'Usuario'
       });
 
-      setSuccessMessage(`¡Venta procesada exitosamente! #${completedSale.data.saleNumber}`);
-      setCart([]);
-      setAmountReceived('');
-      setPaymentMethod('Efectivo');
-      setSelectedCustomerId(''); // Clear customer after sale
+      console.log('🧹 STARTING CLEANUP...');
 
-      // Reset Search & Focus UI
+      setSuccessMessage(`¡Venta procesada exitosamente! #${completedSale.data.saleNumber}`);
+
+      // Clear all states
+      setCart([]);
+      setSelectedCustomerId('');
       setSearchTerm('');
+
+      // Clear payment fields
+      setAmountReceived('0');
+      setRawAmountReceived('0.00');
+      setChangeResult(null);
+      setPaymentMethod('Efectivo');
+      setDocumentType('80');
+
+      // IMPORTANT: Force clear the input field directly via ref
+      // This ensures it clears even if React state updates are delayed
+      if (amountReceivedRef.current) {
+        amountReceivedRef.current.value = '0.00';
+      }
+
       setFocusMode('search');
       setShowProductGrid(false);
-
-      // Focus on search input for next sale
-      setTimeout(() => { searchInputRef.current?.focus(); }, 100);
+      setTimeout(() => { searchInputRef.current?.focus(); }, 150);
 
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['store-inventory'] });
-      queryClient.invalidateQueries({ queryKey: ['customers'] }); // Refresh customer data
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
       queryClient.invalidateQueries({ queryKey: ['cash-shift'] });
 
       setTimeout(() => setSuccessMessage(''), 5000);
@@ -812,10 +1110,30 @@ export default function POSPage() {
               <kbd className="px-2 py-1 bg-background border border-border rounded shadow-sm font-mono text-primary">ESC</kbd>
               <span className="text-muted-foreground">Limpiar</span>
             </div>
-            <div className="flex items-center gap-4">
-              <CashControl />
-              <div className="text-primary font-semibold hidden md:block">
-                Modo: <span className="px-2 py-1 bg-primary/10 rounded border border-primary/20">{focusMode === 'search' ? '🔍 Búsqueda' : focusMode === 'products' ? '📦 Productos' : focusMode === 'cart' ? '🛒 Carrito' : '💳 Pago'}</span>
+            <div className="flex items-center gap-6">
+              {/* Hardware Health Monitor (999) */}
+              <Link href="/settings/hardware" className="flex items-center gap-3 px-4 py-2 bg-background/50 border border-border rounded-xl hover:bg-slate-900 transition-colors cursor-pointer group">
+                <div className="flex items-center gap-2" title={hwStatus.scale.connected ? 'Balanza Conectada' : 'Balanza NO Detectada'}>
+                  <div className={`w-2 h-2 rounded-full ${hwStatus.scale.loading ? 'bg-amber-400 animate-pulse' : hwStatus.scale.connected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500'}`} />
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase group-hover:text-primary transition-colors">⚖️ Balanza</span>
+                </div>
+                <div className="w-px h-4 bg-border" />
+                <div className="flex items-center gap-2" title={hwStatus.printer.connected ? 'Ticketera Activa' : 'Ticketera Pendiente de Prueba'}>
+                  <div className={`w-2 h-2 rounded-full ${hwStatus.printer.connected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-amber-500 animate-pulse'}`} />
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase group-hover:text-primary transition-colors">🖨️ Ticket</span>
+                </div>
+                <div className="w-px h-4 bg-border" />
+                <div className="flex items-center gap-2" title={hwStatus.internet.connected ? 'Conexión Cloud OK' : 'Modo Offline'}>
+                  <div className={`w-2 h-2 rounded-full ${hwStatus.internet.connected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500 animate-pulse'}`} />
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase group-hover:text-primary transition-colors">🌐 Red</span>
+                </div>
+              </Link>
+
+              <div className="flex items-center gap-4">
+                <CashControl />
+                <div className="text-primary font-semibold hidden md:block">
+                  Modo: <span className="px-2 py-1 bg-primary/10 rounded border border-primary/20">{focusMode === 'search' ? '🔍 Búsqueda' : focusMode === 'products' ? '📦 Productos' : focusMode === 'cart' ? '🛒 Carrito' : '💳 Pago'}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -826,7 +1144,7 @@ export default function POSPage() {
 
         {/* Cash Shift Blocking Overlay */}
         {!isShiftOpen && (
-          <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center rounded-xl border border-dashed border-border transition-all duration-500">
+          <div className="absolute inset-0 z-[40] bg-background/80 backdrop-blur-sm flex items-center justify-center rounded-xl border border-dashed border-border transition-all duration-500">
             {isLoadingShift ? (
               <div className="text-center p-8 animate-in fade-in zoom-in duration-300">
                 <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-primary mx-auto mb-6"></div>
@@ -849,6 +1167,44 @@ export default function POSPage() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Old Shift Warning Overlay */}
+        {isShiftOpen && showOldShiftWarning && (
+          <div className="absolute inset-0 z-[45] bg-background/90 backdrop-blur-md flex items-center justify-center rounded-xl border-2 border-amber-500/50 transition-all duration-500">
+            <div className="text-center p-12 bg-card shadow-2xl rounded-[3rem] border-t-8 border-amber-500 max-w-xl animate-in fade-in zoom-in duration-500">
+              <div className="bg-amber-100 dark:bg-amber-900/40 w-28 h-28 rounded-3xl flex items-center justify-center mx-auto mb-8 rotate-3 shadow-lg">
+                <AlertTriangle className="w-16 h-16 text-amber-600 dark:text-amber-400" />
+              </div>
+
+              <h2 className="text-4xl font-black mb-6 text-foreground tracking-tight">Caja del Día Anterior</h2>
+
+              <div className="space-y-4 mb-10 text-left bg-secondary/50 p-6 rounded-2xl border border-border">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground font-medium uppercase tracking-wider">Apertura</span>
+                  <span className="font-bold text-amber-600 dark:text-amber-400">
+                    {new Date(openShift.startTime).toLocaleDateString()} {new Date(openShift.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+                <div className="w-full h-px bg-border/50" />
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground font-medium uppercase tracking-wider">Estado Actual</span>
+                  <span className="font-bold text-red-500">PENDIENTE DE CIERRE</span>
+                </div>
+              </div>
+
+              <p className="text-lg text-muted-foreground mb-10 leading-relaxed font-medium">
+                Por seguridad y control financiero, es obligatorio <strong className="text-foreground underline decoration-amber-500 decoration-2 underline-offset-4">cerrar la caja del día anterior</strong> antes de comenzar a vender hoy.
+              </p>
+
+              <div className="flex flex-col gap-4 items-center">
+                <CashControl className="w-full py-6 text-xl justify-center font-black rounded-2xl shadow-xl hover:shadow-amber-500/20 transition-all active:scale-95" />
+                <p className="text-[10px] uppercase font-black tracking-[0.2em] text-muted-foreground/40 mt-2">
+                  Verifica tu efectivo antes de cerrar
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
@@ -901,7 +1257,7 @@ export default function POSPage() {
                       <option value="">Sin listas</option>
                     )}
                   </select>
-                  <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full border border-border">F2 para buscar | ESC para limpiar</span>
+                  <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full border border-border">Atajos: F2 para Buscar • ESC para Limpiar</span>
                 </div>
               </div>
 
@@ -909,7 +1265,7 @@ export default function POSPage() {
                 <input
                   ref={searchInputRef}
                   type="text"
-                  placeholder="Escanea o escribe (ej: 5*bolsa)..."
+                  placeholder="Busque un producto aquí o escanee el código..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   onFocus={() => {
@@ -927,70 +1283,77 @@ export default function POSPage() {
                       e.preventDefault();
                       if (!searchTerm.trim()) return;
 
-                      // Support Qty*Product syntax (e.g. 5*Fardo)
-                      let quantityToAdd = 1;
-                      let actualSearchTerm = searchTerm;
-
-                      if (searchTerm.includes('*')) {
-                        const parts = searchTerm.split('*');
-                        const qty = parseInt(parts[0]);
-                        if (!isNaN(qty) && qty > 0) {
-                          quantityToAdd = qty;
-                          actualSearchTerm = parts[1].trim();
-                        }
-                      } else if (searchTerm.toLowerCase().includes('x')) {
-                        // Also support QtyxProduct (e.g. 5x)
-                        const parts = searchTerm.split(/x/i);
-                        const qty = parseInt(parts[0]);
-                        if (!isNaN(qty) && qty > 0 && parts[1]) {
-                          quantityToAdd = qty;
-                          actualSearchTerm = parts[1].trim();
-                        }
-                      }
-
                       if (filteredProducts && filteredProducts.length > 0) {
                         // Priority 1: If there is an exact match in code or name
-                        const exactMatch = filteredProducts.find(p =>
-                          p.code.toLowerCase() === actualSearchTerm.toLowerCase() ||
-                          p.name.toLowerCase() === actualSearchTerm.toLowerCase() ||
-                          p.barcode === actualSearchTerm ||
-                          p.shortScanCode === actualSearchTerm
-                        );
+                        let matchedUomId: string | undefined;
+                        const exactMatch = filteredProducts.find(p => {
+                          if (p.code.toLowerCase() === searchTermToFilter.toLowerCase() ||
+                            p.name.toLowerCase() === searchTermToFilter.toLowerCase() ||
+                            (p.barcode && p.barcode.toLowerCase() === searchTermToFilter.toLowerCase()) ||
+                            (p.shortScanCode && p.shortScanCode.toLowerCase() === searchTermToFilter.toLowerCase())) {
+                            return true;
+                          }
+                          const uomMatch = p.saleUOMs?.find(u => u.barcode && u.barcode.toLowerCase() === searchTermToFilter.toLowerCase());
+                          if (uomMatch) {
+                            matchedUomId = uomMatch.uomId;
+                            return true;
+                          }
+                          return false;
+                        });
 
                         if (exactMatch) {
-                          addToCart(exactMatch.id, quantityToAdd);
+                          if (exactMatch.allowFractional && quantityToAddFromSearch === 1) {
+                            openWeightModal(exactMatch, matchedUomId);
+                          } else {
+                            addToCart(exactMatch.id, quantityToAddFromSearch, matchedUomId);
+                            setSearchTerm('');
+                          }
                         } else if (filteredProducts.length === 1) {
                           // Priority 2: If only one result, add it
-                          addToCart(filteredProducts[0].id, quantityToAdd);
+                          const p = filteredProducts[0];
+                          if (p.allowFractional && quantityToAddFromSearch === 1) {
+                            openWeightModal(p);
+                          } else {
+                            addToCart(p.id, quantityToAddFromSearch);
+                            setSearchTerm('');
+                          }
                         } else {
                           // Priority 3: Use the CURRENTLY SELECTED product (navigation with arrows)
                           const currentSelected = filteredProducts[selectedProductIndex];
                           if (currentSelected) {
-                            addToCart(currentSelected.id, quantityToAdd);
+                            if (currentSelected.allowFractional && quantityToAddFromSearch === 1) {
+                              openWeightModal(currentSelected);
+                            } else {
+                              addToCart(currentSelected.id, quantityToAddFromSearch);
+                              setSearchTerm('');
+                            }
                           }
                         }
                       }
                     }
                   }}
-                  className={`w-full px-5 py-4 text-lg border-2 rounded-xl focus:outline-none transition-all ${focusMode === 'search'
-                    ? 'border-primary ring-4 ring-primary/10 bg-background shadow-lg'
+                  className={`w-full px-5 py-5 text-xl font-bold border-2 rounded-2xl focus:outline-none transition-all ${focusMode === 'search'
+                    ? 'border-primary ring-4 ring-primary/10 bg-background shadow-xl'
                     : 'border-input bg-muted/5'
                     }`}
                   autoFocus
                 />
-                {searchTerm && (
-                  <button
-                    onClick={() => {
-                      setSearchTerm('');
-                      searchInputRef.current?.focus();
-                    }}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                )}
+                <div className="flex justify-end mt-2 px-2">
+                  {searchTerm && (
+                    <button
+                      onClick={() => {
+                        setSearchTerm('');
+                        searchInputRef.current?.focus();
+                      }}
+                      className="text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                    >
+                      <span className="text-[10px] font-bold uppercase tracking-widest">Limpiar</span>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {isLoading && (
@@ -1023,7 +1386,7 @@ export default function POSPage() {
                         const effectiveStock = Math.max(0, stock - inCartBase);
                         const isOutOfStock = effectiveStock <= 0;
                         const isLowStock = effectiveStock > 0 && effectiveStock <= (product.minimumStock || 10);
-                        const isSelected = focusMode === 'products' && index === selectedProductIndex;
+                        const isSelected = (focusMode === 'products' || (focusMode === 'search' && searchTerm)) && index === selectedProductIndex;
 
                         return (
                           <div
@@ -1031,7 +1394,11 @@ export default function POSPage() {
                             ref={(el) => { productRefs.current[index] = el; }}
                             onClick={() => {
                               if (!isOutOfStock) {
-                                addToCart(product.id, 1);
+                                if (product.allowFractional) {
+                                  openWeightModal(product);
+                                } else {
+                                  addToCart(product.id, 1);
+                                }
                                 setFocusMode('products');
                                 setSelectedProductIndex(index);
                               }
@@ -1043,11 +1410,18 @@ export default function POSPage() {
                                 : 'border-border hover:border-primary/50 hover:shadow-md cursor-pointer bg-card'
                               }`}
                           >
-                            <div className="flex justify-between items-start">
-                              <div className="flex-1">
-                                <p className={`font-bold ${isOutOfStock ? 'text-muted-foreground' : isSelected ? 'text-primary' : 'text-foreground group-hover:text-primary'}`}>
-                                  {product.name}
-                                </p>
+                            <div className="flex justify-between items-start gap-4">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <p className={`font-black tracking-tight text-lg leading-tight truncate ${isOutOfStock ? 'text-muted-foreground' : isSelected ? 'text-primary' : 'text-foreground group-hover:text-primary'}`}>
+                                    {product.name}
+                                  </p>
+                                  {product.allowFractional && (
+                                    <span className="text-[9px] bg-indigo-500/20 text-indigo-500 px-1.5 py-0.5 rounded font-black uppercase tracking-tighter border border-indigo-500/30">
+                                      ⚖️ Peso
+                                    </span>
+                                  )}
+                                </div>
                                 <p className="text-sm text-muted-foreground mt-1">Código: {product.code}</p>
                                 <div className="mt-1 space-y-1">
                                   <div className="flex justify-between items-center">
@@ -1062,35 +1436,78 @@ export default function POSPage() {
                                   </div>
                                   <div className="flex flex-wrap gap-x-2 gap-y-1.5">
                                     {product.saleUOMs?.filter(uom => uom.isActive !== false).map(uom => {
-                                      const convertedStock = Math.floor(effectiveStock / (uom.conversionToBase || 1));
-                                      const hasStockInUOM = convertedStock > 0;
+                                      const convertedStock = effectiveStock / (uom.conversionToBase || 1);
+                                      const hasStockInUOM = product.allowFractional ? convertedStock > 0.001 : convertedStock >= 1;
+                                      const isKg = uom.uomCode?.toUpperCase() === 'KG' || uom.uomName?.toUpperCase() === 'KILOGRAMO';
+
                                       return (
-                                        <button
-                                          key={uom.uomId}
-                                          disabled={!hasStockInUOM}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            addToCart(product.id, 1, uom.uomId);
-                                          }}
-                                          className={`text-[10px] px-2.5 py-1.5 rounded-md border whitespace-nowrap font-bold transition-all shadow-sm ${hasStockInUOM
-                                            ? 'bg-slate-800 text-slate-100 border-slate-600 hover:bg-primary hover:border-primary hover:scale-105 active:scale-95 cursor-pointer'
-                                            : 'bg-muted/10 text-muted-foreground/30 border-border/10 cursor-not-allowed'
-                                            }`}
-                                        >
-                                          {convertedStock} {uom.uomName}
-                                        </button>
+                                        <div key={uom.uomId} className="w-full">
+                                          <button
+                                            disabled={!hasStockInUOM}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              if (product.allowFractional) {
+                                                openWeightModal(product, uom.uomId);
+                                              } else {
+                                                addToCart(product.id, 1, uom.uomId);
+                                              }
+                                            }}
+                                            className={`text-[10px] px-2.5 py-1.5 rounded-md border whitespace-nowrap font-bold transition-all shadow-sm ${hasStockInUOM
+                                              ? (searchTermToFilter && uom.barcode && uom.barcode.toLowerCase() === searchTermToFilter.toLowerCase())
+                                                ? 'bg-primary text-white border-primary ring-2 ring-primary/30 scale-110 shadow-lg'
+                                                : 'bg-slate-800 text-slate-100 border-slate-600 hover:bg-primary hover:border-primary hover:scale-105 active:scale-95 cursor-pointer'
+                                              : 'bg-muted/10 text-muted-foreground/30 border-border/10 cursor-not-allowed'
+                                              }`}
+                                          >
+                                            {convertedStock % 1 === 0 ? convertedStock : convertedStock.toFixed(3)} {uom.uomName}
+                                            {uom.barcode && uom.barcode.toLowerCase() === searchTermToFilter.toLowerCase() && (
+                                              <span className="ml-1 text-[8px] animate-pulse">✨</span>
+                                            )}
+                                          </button>
+
+                                          {/* Atajos rápidos para Peso (KG) - En fila separada */}
+                                          {isSelected && isKg && hasStockInUOM && (
+                                            <div className="mt-2 flex items-center gap-1.5 animate-in slide-in-from-top-1 duration-200">
+                                              <span className="text-[9px] text-muted-foreground font-semibold">Atajos:</span>
+                                              <button
+                                                onClick={(e) => { e.stopPropagation(); addToCart(product.id, 0.25, uom.uomId); }}
+                                                className="text-[9px] bg-primary/20 text-primary border border-primary/30 px-2 py-1 rounded hover:bg-primary hover:text-white transition-colors font-bold"
+                                              >
+                                                1/4 kg
+                                              </button>
+                                              <button
+                                                onClick={(e) => { e.stopPropagation(); addToCart(product.id, 0.5, uom.uomId); }}
+                                                className="text-[9px] bg-primary/20 text-primary border border-primary/30 px-2 py-1 rounded hover:bg-primary hover:text-white transition-colors font-bold"
+                                              >
+                                                1/2 kg
+                                              </button>
+                                              <button
+                                                onClick={(e) => { e.stopPropagation(); addToCart(product.id, 0.75, uom.uomId); }}
+                                                className="text-[9px] bg-primary/20 text-primary border border-primary/30 px-2 py-1 rounded hover:bg-primary hover:text-white transition-colors font-bold"
+                                              >
+                                                3/4 kg
+                                              </button>
+                                              <button
+                                                onClick={(e) => { e.stopPropagation(); addToCart(product.id, 0.1, uom.uomId); }}
+                                                className="text-[9px] bg-indigo-500/20 text-indigo-500 border border-indigo-500/30 px-2 py-1 rounded hover:bg-indigo-500 hover:text-white transition-colors font-bold"
+                                              >
+                                                100g
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
                                       );
                                     })}
-                                    {/* Always show base units if not already shown */}
-                                    {product.saleUOMs?.every(uom => uom.conversionToBase !== 1) && (
+                                    {/* Only show units that are explicitly defined in saleUOMs */}
+                                    {(!product.saleUOMs || product.saleUOMs.filter(uom => uom.isActive !== false).length === 0) && (
                                       <span className="text-[10px] bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded border border-slate-700 whitespace-nowrap font-medium">
-                                        {effectiveStock} UND
+                                        {effectiveStock} {product.baseUOMCode || 'UND'}
                                       </span>
                                     )}
                                   </div>
                                 </div>
                               </div>
-                              <div className="text-right ml-4">
+                              <div className="flex flex-col items-end gap-1 shrink-0">
                                 <p className={`text-2xl font-bold ${isOutOfStock ? 'text-muted-foreground' : 'text-green-600 dark:text-green-400'}`}>
                                   {formatCurrency(getProductPrice(product, selectedPriceList))}
                                 </p>
@@ -1192,10 +1609,10 @@ export default function POSPage() {
               ) : (
                 <>
                   <div className="mb-4 max-h-[500px] overflow-y-auto border border-border rounded-xl">
-                    <div className="grid grid-cols-12 gap-1 px-4 py-2 border-b bg-muted/50 text-[10px] font-bold text-muted-foreground uppercase tracking-wider sticky top-0 z-10">
-                      <div className="col-span-2">Cant.</div>
-                      <div className="col-span-7">Producto / Unidad</div>
-                      <div className="col-span-3 text-right">Total</div>
+                    <div className="grid grid-cols-12 gap-1 px-4 py-3 border-b bg-muted/50 text-[11px] font-black text-muted-foreground uppercase tracking-widest sticky top-0 z-10">
+                      <div className="col-span-2">CANT.</div>
+                      <div className="col-span-7">PRODUCTO / UNIDAD</div>
+                      <div className="col-span-3 text-right">TOTAL</div>
                     </div>
                     {cart.map((item, index) => {
                       const product = products?.find(p => p.id === item.productId);
@@ -1213,20 +1630,55 @@ export default function POSPage() {
                             }`}
                         >
                           {/* Columna Cantidad */}
-                          <div className="col-span-2">
+                          <div className="col-span-2 relative">
                             <input
                               ref={(el) => { quantityInputRefs.current[index] = el; }}
                               type="text"
-                              inputMode="numeric"
-                              value={item.quantity === 0 ? '' : item.quantity}
+                              inputMode="decimal"
+                              value={rawQuantities[`${item.productId}-${item.uomId}`] ?? (item.quantity === 0 ? '' : item.quantity.toString())}
                               onChange={(e) => {
-                                const val = e.target.value;
-                                if (val === '') { updateQuantity(item.productId, item.uomId, 0); return; }
-                                const parsed = parseInt(val);
-                                if (!isNaN(parsed)) updateQuantity(item.productId, item.uomId, Math.max(0, parsed));
+                                let val = e.target.value.replace(',', '.').toLowerCase();
+
+                                // Permite escribir el punto decimal sin que se borre (ej: "0.")
+                                setRawQuantities(prev => ({ ...prev, [`${item.productId}-${item.uomId}`]: val }));
+
+                                if (val === '' || val === '.') {
+                                  updateQuantity(item.productId, item.uomId, 0);
+                                  return;
+                                }
+
+                                let parsed = parseFloat(val);
+
+                                // Gram support: if ends with 'g' or 'gr'
+                                if (val.endsWith('g') || val.endsWith('gr')) {
+                                  parsed = parsed / 1000;
+                                }
+
+                                if (!isNaN(parsed)) {
+                                  updateQuantity(item.productId, item.uomId, Math.max(0, parsed));
+                                }
+                              }}
+                              onBlur={() => {
+                                // Al salir, validamos estrictamente por si dejaron un número inválido (ej: dejaron "200" sin la "g")
+                                const key = `${item.productId}-${item.uomId}`;
+                                const rawVal = rawQuantities[key];
+                                if (rawVal) {
+                                  let val = rawVal.replace(',', '.').toLowerCase();
+                                  let parsed = parseFloat(val);
+                                  if (val.endsWith('g') || val.endsWith('gr')) parsed /= 1000;
+                                  if (!isNaN(parsed)) {
+                                    updateQuantity(item.productId, item.uomId, parsed, true);
+                                  }
+                                }
+
+                                setRawQuantities(prev => {
+                                  const newState = { ...prev };
+                                  delete newState[key];
+                                  return newState;
+                                });
                               }}
                               onFocus={(e) => { e.target.select(); setFocusMode('cart'); setSelectedCartIndex(index); }}
-                              className="w-full text-center font-bold text-foreground bg-muted/50 border border-transparent hover:border-border focus:border-primary rounded px-1 py-1 text-sm shadow-inner"
+                              className={`w-full text-center font-bold text-foreground bg-muted/50 border rounded px-1 py-1 text-sm shadow-inner transition-colors ${isSelected ? 'border-primary ring-2 ring-primary/20' : 'border-transparent hover:border-border'}`}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
                                   e.preventDefault();
@@ -1236,11 +1688,16 @@ export default function POSPage() {
                                 }
                               }}
                             />
+                            {product?.allowFractional && isSelected && (
+                              <div className="absolute -bottom-6 left-0 w-[140px] z-50 bg-slate-900 border border-slate-700 text-white text-[9px] font-black px-2 py-1 rounded shadow-2xl animate-in fade-in slide-in-from-top-1">
+                                💡 ESCRIBE <span className="text-primary italic">"250g"</span>
+                              </div>
+                            )}
                           </div>
 
                           {/* Columna Producto - Más espacio (col-span-7) */}
                           <div className="col-span-7 overflow-hidden px-1">
-                            <p className={`font-bold leading-tight truncate text-sm mb-1 ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+                            <p className={`font-black leading-tight truncate text-base mb-1 ${isSelected ? 'text-primary' : 'text-foreground'}`}>
                               {item.productName}
                             </p>
                             <div className="flex items-center gap-2">
@@ -1295,11 +1752,19 @@ export default function POSPage() {
                       <span className="font-medium">{BusinessConfig.tax.igvLabel} ({(BusinessConfig.tax.igvRate * 100).toFixed(0)}%):</span>
                       <span className="font-semibold">{formatCurrency(calculateIGV())}</span>
                     </div>
-                    <div className="flex justify-between items-center py-3 bg-muted px-4 rounded-lg">
-                      <span className="text-lg font-bold text-foreground">TOTAL:</span>
-                      <span className="text-2xl font-bold text-primary">
-                        {formatCurrency(calculateTotal())}
-                      </span>
+                    <div className="flex flex-col gap-1 py-6 bg-slate-900 dark:bg-slate-950 px-6 rounded-[2rem] shadow-2xl shadow-primary/20 border border-primary/20 relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-125 transition-transform duration-700">
+                        <svg className="w-24 h-24 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <span className="text-[10px] font-black text-primary/80 uppercase tracking-[0.2em] mb-1">Total a Pagar</span>
+                      <div className="flex justify-between items-baseline">
+                        <span className="text-4xl font-black text-white italic">
+                          {formatCurrency(calculateTotal())}
+                        </span>
+                        <span className="text-xs font-bold text-white/40 uppercase tracking-tighter">PEN</span>
+                      </div>
                     </div>
 
                     <div className="pt-2 space-y-3">
@@ -1330,92 +1795,155 @@ export default function POSPage() {
                           value={paymentMethod}
                           onChange={(e) => {
                             setPaymentMethod(e.target.value);
-                            if (e.target.value !== 'Efectivo') {
+                            const selectedConfig = paymentMethods?.find(m => m.name === e.target.value);
+                            if (!selectedConfig?.requiresAmountReceived) {
                               setAmountReceived('');
+                              setRawAmountReceived('0.00');
                             }
                           }}
                           onFocus={() => setFocusMode('payment')}
                           onKeyDown={handlePaymentMethodKeyDown}
                           className="w-full px-4 py-3 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-background text-foreground font-medium"
                         >
-                          {BusinessConfig.payment.methods.map(method => (
-                            <option key={method.id} value={method.name}>{method.name}</option>
+                          {(paymentMethods || BusinessConfig.payment.methods).map((method: any) => (
+                            <option key={method.id || method.code} value={method.name}>{method.name}</option>
                           ))}
                         </select>
                       </div>
 
-                      {paymentMethod === 'Efectivo' && (
-                        <div>
-                          <label className="block text-sm font-bold text-muted-foreground mb-2">
-                            Monto Recibido
-                          </label>
-                          <input
-                            ref={amountReceivedRef}
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            placeholder="0.00"
-                            value={amountReceived}
-                            onChange={(e) => setAmountReceived(e.target.value)}
-                            onKeyDown={handleAmountReceivedKeyDown}
-                            onFocus={(e) => { e.target.select(); setFocusMode('payment'); }}
-                            className="w-full px-4 py-3 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-background text-foreground font-medium text-lg"
-                          />
-                          {amountReceived && parseFloat(amountReceived) > 0 && (
-                            <div className={`mt-2 p-3 rounded-lg ${calculateChange() >= 0
-                              ? 'bg-green-500/10 border border-green-500/30'
-                              : 'bg-destructive/10 border border-destructive/30'
-                              }`}>
-                              <div className="flex justify-between items-center">
-                                <span className={`font-semibold ${calculateChange() >= 0 ? 'text-green-600 dark:text-green-400' : 'text-destructive'}`}>
-                                  Vuelto:
-                                </span>
-                                <span className={`text-xl font-bold ${calculateChange() >= 0 ? 'text-green-600 dark:text-green-400' : 'text-destructive'}`}>
-                                  {formatCurrency(Math.max(0, calculateChange()))}
-                                </span>
+                      {(() => {
+                        const selectedMethodConfig = paymentMethods?.find(m => m.name === paymentMethod);
+                        return selectedMethodConfig?.requiresAmountReceived;
+                      })() && (
+                          <div>
+                            <label className="block text-sm font-bold text-muted-foreground mb-2">
+                              Monto Recibido
+                            </label>
+                            <input
+                              ref={amountReceivedRef}
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="0.00"
+                              value={rawAmountReceived}
+                              onChange={(e) => {
+                                let val = e.target.value.replace(',', '.');
+                                setRawAmountReceived(val);
+
+                                const parsed = parseFloat(val);
+                                if (!isNaN(parsed)) {
+                                  setAmountReceived(val);
+                                } else if (val === '') {
+                                  setAmountReceived('0');
+                                }
+                              }}
+                              onKeyDown={handleAmountReceivedKeyDown}
+                              onFocus={(e) => {
+                                e.target.select();
+                                setFocusMode('payment');
+                                // Si el valor es por defecto 0.00, lo limpiamos para facilitar escritura
+                                if (rawAmountReceived === '0.00') setRawAmountReceived('');
+                              }}
+                              onBlur={() => {
+                                // Formateamos al salir si es un número válido
+                                const parsed = parseFloat(rawAmountReceived);
+                                if (!isNaN(parsed)) {
+                                  setRawAmountReceived(parsed.toFixed(2));
+                                  setAmountReceived(parsed.toString());
+                                } else {
+                                  setRawAmountReceived('0.00');
+                                  setAmountReceived('0');
+                                }
+                              }}
+                              className="w-full px-5 py-4 border-2 border-primary/30 rounded-xl focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary bg-background text-foreground font-black text-2xl shadow-inner text-right tracking-widest italic"
+                            />
+                            {amountReceived && parseFloat(amountReceived) > 0 && (
+                              <div className="mt-2">
+                                {paymentMethod === 'Efectivo' && (
+                                  <div className="bg-muted/30 p-4 rounded-2xl space-y-2">
+                                    {changeResult ? (
+                                      <>
+                                        {changeResult.roundingAdjustment !== 0 && (
+                                          <div className="flex justify-between items-center text-xs text-muted-foreground italic mb-1">
+                                            <span>Redondeo BCRP:</span>
+                                            <span>
+                                              {changeResult.roundingAdjustment > 0 ? '+' : ''}{formatCurrency(changeResult.roundingAdjustment)}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {changeResult.roundingAdjustment !== 0 && (
+                                          <div className="flex justify-between items-center text-xs mb-1.5 pb-1.5 border-b border-border/30">
+                                            <span className="text-muted-foreground">Total a cobrar:</span>
+                                            <span className="font-bold text-foreground">{formatCurrency(changeResult.roundedTotal)}</span>
+                                          </div>
+                                        )}
+                                        <div className="flex justify-between items-center">
+                                          <span className={`font-semibold ${changeResult.isPaymentSufficient ? 'text-green-600 dark:text-green-400' : 'text-destructive'}`}>
+                                            Vuelto:
+                                          </span>
+                                          <span className={`text-xl font-bold ${changeResult.isPaymentSufficient ? 'text-green-600 dark:text-green-400' : 'text-destructive'}`}>
+                                            {formatCurrency(changeResult.change)}
+                                          </span>
+                                        </div>
+                                        {!changeResult.isPaymentSufficient && (
+                                          <p className="text-xs text-destructive mt-1">
+                                            Falta: {formatCurrency(changeResult.deficit)}
+                                          </p>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <div className="animate-pulse h-10 bg-muted/50 rounded-lg"></div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
-                              {calculateChange() < 0 && (
-                                <p className="text-xs text-destructive mt-1">
-                                  Falta: {formatCurrency(Math.abs(calculateChange()))}
-                                </p>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
+                            )}
+                          </div>
+                        )}
                     </div>
 
-                    {paymentMethod === 'Crédito' && selectedCustomer && (
-                      <div className="bg-orange-500/10 p-3 rounded-lg border border-orange-500/20">
-                        <p className="text-sm text-orange-600 font-medium text-center">
-                          Venta a Crédito - 30 días
-                        </p>
-                        <div className="flex justify-between text-sm mt-1">
-                          <span>Saldo Nuevo:</span>
-                          <span className="font-bold text-orange-700">{formatCurrency(selectedCustomer.currentDebt + calculateTotal())}</span>
+                    {(() => {
+                      const selectedMethodConfig = paymentMethods?.find(m => m.name === paymentMethod);
+                      return selectedMethodConfig?.generatesDebt && selectedCustomer;
+                    })() && (
+                        <div className="bg-orange-500/10 p-3 rounded-lg border border-orange-500/20">
+                          <p className="text-sm text-orange-600 font-medium text-center">
+                            Venta a Crédito - 30 días
+                          </p>
+                          <div className="flex justify-between text-sm mt-1">
+                            <span>Saldo Nuevo:</span>
+                            <span className="font-bold text-orange-700">{formatCurrency((selectedCustomer?.currentDebt ?? 0) + calculateTotal())}</span>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
                     <button
                       ref={processButtonRef}
                       onClick={handleProcessSale}
                       disabled={isProcessing || (paymentMethod === 'Efectivo' && !isPaymentValid())}
-                      className={`w-full py-4 rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02] ${isPaymentValid()
-                        ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                        : 'bg-muted text-muted-foreground'
-                        } ${focusMode === 'payment' && isPaymentValid() ? 'ring-4 ring-primary/30 animate-pulse' : ''}`}
+                      className={`w-full py-6 rounded-[2rem] font-black text-xl uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 shadow-xl ${isPaymentValid()
+                        ? 'bg-primary text-primary-foreground hover:scale-[1.02] active:scale-95 shadow-primary/30'
+                        : 'bg-destructive/10 text-destructive border-2 border-destructive/20 cursor-not-allowed'
+                        } ${focusMode === 'payment' && isPaymentValid() ? 'ring-4 ring-primary/30 animate-pulse outline-none' : ''}`}
                     >
                       {isProcessing ? (
-                        <span className="flex items-center justify-center">
-                          <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        <>
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
+                          <span>Procesando...</span>
+                        </>
+                      ) : !isPaymentValid() ? (
+                        <>
+                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                           </svg>
-                          Procesando...
-                        </span>
+                          <span>Pago Insuficiente</span>
+                        </>
                       ) : (
-                        isPaymentValid() ? 'PROCESAR VENTA (ENTER)' : 'PAGO INSUFICIENTE'
+                        <>
+                          <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Cobrar (F9)</span>
+                        </>
                       )}
                     </button>
                   </div>
@@ -1537,6 +2065,130 @@ export default function POSPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </AppLayout>
+
+      {/* Weight Selection Modal (Venta Orientada a Peso) */}
+      <Dialog open={isWeightModalOpen} onOpenChange={(open) => {
+        setIsWeightModalOpen(open);
+        if (!open) {
+          setWeightModalProduct(null);
+          setModalWeight('');
+        }
+      }}>
+        <DialogContent className="sm:max-w-[450px] p-0 overflow-hidden border-none shadow-2xl">
+          <div className="bg-slate-900 text-white p-6 relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-4 opacity-10">
+              <svg className="w-32 h-32" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+              </svg>
+            </div>
+            <div className="relative z-10">
+              <span className="text-primary text-[10px] font-black uppercase tracking-[0.3em] mb-1 block">Entrada de Peso</span>
+              <h2 className="text-2xl font-black italic truncate">{weightModalProduct?.name}</h2>
+              <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider">{modalUomId ? weightModalProduct?.saleUOMs?.find(u => u.uomId === modalUomId)?.uomName : 'Precio Base'}</p>
+            </div>
+          </div>
+
+          <div className="p-8 space-y-8 bg-background">
+            <div className="space-y-4">
+              <div className="flex justify-between items-end mb-1">
+                <Label className="text-xs font-black text-muted-foreground uppercase tracking-widest">Peso / Cantidad</Label>
+                <div className="text-right">
+                  <span className="text-[10px] text-muted-foreground font-bold uppercase block">
+                    Precio x {modalUomId ? weightModalProduct?.saleUOMs?.find(u => u.uomId === modalUomId)?.uomName : 'Unidad'}
+                  </span>
+                  <span className="text-lg font-black text-foreground">
+                    {formatCurrency(weightModalProduct ? getProductPrice(weightModalProduct, selectedPriceList, modalUomId) : 0)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="relative group">
+                <Input
+                  ref={weightInputRef}
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0.000"
+                  value={modalWeight}
+                  onChange={(e) => setModalWeight(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddWeightToCart();
+                    }
+                  }}
+                  className="h-20 text-5xl font-black text-center border-2 border-muted hover:border-primary/30 focus:border-primary transition-all rounded-2xl bg-muted/20"
+                />
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-20 text-2xl font-black italic">
+                  {modalUomId ? weightModalProduct?.saleUOMs?.find(u => u.uomId === modalUomId)?.uomName.substring(0, 2).toUpperCase() : 'KG'}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { label: '100g', value: '0.1' },
+                  { label: '250g', value: '0.25' },
+                  { label: '500g', value: '0.5' },
+                  { label: '1 Kg', value: '1' }
+                ].map((preset) => (
+                  <button
+                    key={preset.label}
+                    onClick={() => {
+                      setModalWeight(preset.value);
+                      setTimeout(() => weightInputRef.current?.focus(), 50);
+                    }}
+                    className="py-3 px-1 border-2 border-muted hover:border-primary hover:bg-primary/5 rounded-xl text-xs font-black uppercase transition-all active:scale-95"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="py-6 border-y-2 border-dashed border-muted flex justify-between items-center px-4 bg-muted/5 rounded-xl">
+              <div>
+                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Total estimado</span>
+                <span className="text-3xl font-black text-primary italic">
+                  {formatCurrency((weightModalProduct ? getProductPrice(weightModalProduct, selectedPriceList, modalUomId) : 0) * parseModalWeight(modalWeight))}
+                </span>
+              </div>
+
+              <button
+                onClick={async () => {
+                  if (weightModalProduct) {
+                    // @ts-ignore (Will be handled by connectToScale inside page)
+                    if (window.connectToScale) (window as any).connectToScale(weightModalProduct.id, modalUomId);
+                    // No cierro para que el usuario vea el resultado
+                  }
+                }}
+                className="p-4 bg-indigo-500 hover:bg-indigo-600 text-white rounded-2xl shadow-lg shadow-indigo-500/30 transition-all hover:scale-110 active:scale-90"
+                title="Leer Balanza (F10)"
+              >
+                <div className="flex flex-col items-center">
+                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                  </svg>
+                  <span className="text-[8px] font-black mt-1 uppercase tracking-tighter">Balanza</span>
+                </div>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => setIsWeightModalOpen(false)}
+                className="py-4 text-xs font-black uppercase text-muted-foreground hover:bg-muted/50 rounded-2xl transition-all"
+              >
+                Cancelar (Esc)
+              </button>
+              <button
+                onClick={handleAddWeightToCart}
+                className="py-4 bg-primary text-primary-foreground text-sm font-black uppercase rounded-2xl shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all"
+              >
+                Confirmar Peso (↵)
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </AppLayout >
   );
 }

@@ -90,8 +90,9 @@ export default function InventarioPage() {
                     unitCost, // Use base unit cost
                     purchasePrice: (product as any).purchasePrice || 0,
                     purchaseUOMName: (product as any).purchaseUOMName || 'Unidad',
-                    saleUOMs: product.saleUOMs, // Include UOM info for display
-                    purchaseUOMs: product.purchaseUOMs
+                    saleUOMs: product.saleUOMs,
+                    purchaseUOMs: product.purchaseUOMs,
+                    baseUOMCode: (product as any).baseUOMCode || 'UND'
                 };
             }
 
@@ -111,7 +112,8 @@ export default function InventarioPage() {
                 purchasePrice: (product as any).purchasePrice || 0,
                 purchaseUOMName: (product as any).purchaseUOMName || 'Unidad',
                 saleUOMs: product.saleUOMs,
-                purchaseUOMs: product.purchaseUOMs
+                purchaseUOMs: product.purchaseUOMs,
+                baseUOMCode: (product as any).baseUOMCode || 'UND'
             } as any; // Using any because StoreInventoryItem might not have UOMs yet
         });
     }, [inventory, products, user?.currentStoreId]);
@@ -287,7 +289,7 @@ export default function InventarioPage() {
     };
 
     const saveMinimumStock = async (inventoryId: string) => {
-        const newMinStock = parseInt(minStockValue);
+        const newMinStock = parseFloat(minStockValue);
         if (isNaN(newMinStock) || newMinStock < 0) {
             toast.error('Ingrese un valor válido (número mayor o igual a 0)');
             return;
@@ -337,7 +339,7 @@ export default function InventarioPage() {
                 reason: adjustmentReason.trim(),
                 uomId: selectedUomId || undefined,
                 uomCode: currentUOM?.code || undefined,
-                originalQuantity: Math.round(quantityInput),
+                originalQuantity: quantityInput,
                 conversionFactor: conversionFactor > 1 ? conversionFactor : undefined
             });
 
@@ -468,7 +470,7 @@ export default function InventarioPage() {
                             <span className={`text-sm font-bold ${isOut ? 'text-red-600' : isLow ? 'text-yellow-600' : 'text-green-600'}`}>
                                 {stock}
                             </span>
-                            <span className="text-[10px] text-muted-foreground font-medium px-1 bg-muted rounded border border-border/50 uppercase">UND (Base)</span>
+                            <span className="text-[10px] text-muted-foreground font-medium px-1 bg-muted rounded border border-border/50 uppercase">{item.baseUOMCode || 'UND'} (Base)</span>
                             {(isLow || isOut) && <AlertTriangle className="w-4 h-4 text-red-600" />}
                         </div>
 
@@ -479,11 +481,11 @@ export default function InventarioPage() {
                                     .filter((uom: any) => uom.conversionToBase > 1)
                                     .sort((a: any, b: any) => b.conversionToBase - a.conversionToBase)
                                     .map((uom: any) => {
-                                        const convertedStock = Math.floor(stock / uom.conversionToBase);
-                                        if (convertedStock === 0) return null;
+                                        const convertedStock = stock / uom.conversionToBase;
+                                        if (convertedStock <= 0) return null;
                                         return (
                                             <span key={uom.uomId} className="text-[9px] bg-muted/50 px-1 py-0.5 rounded border border-border text-muted-foreground/80 whitespace-nowrap">
-                                                {convertedStock} {uom.uomName}
+                                                {convertedStock % 1 === 0 ? convertedStock : convertedStock.toFixed(3)} {uom.uomName}
                                             </span>
                                         );
                                     })}
@@ -1325,7 +1327,7 @@ export default function InventarioPage() {
 
                                         {conversionFactor > 1 && adjustmentQuantity && (
                                             <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
-                                                <strong>Conversión:</strong> {adjustmentQuantity} {currentUOM?.code} = {Math.round(parseFloat(adjustmentQuantity) * conversionFactor)} unidades base
+                                                <strong>Conversión:</strong> {adjustmentQuantity} {currentUOM?.code} = {(parseFloat(adjustmentQuantity) * conversionFactor).toFixed(3)} unidades base
                                             </div>
                                         )}
 
@@ -1479,7 +1481,7 @@ export default function InventarioPage() {
 
                                         {conversionFactor > 1 && transferQuantity && (
                                             <div className="p-3 bg-purple-50 rounded-lg text-sm text-purple-700">
-                                                <strong>Conversión:</strong> {transferQuantity} {currentUOM?.code} = {Math.round(parseFloat(transferQuantity) * conversionFactor)} unidades base
+                                                <strong>Conversión:</strong> {transferQuantity} {currentUOM?.code} = {(parseFloat(transferQuantity) * conversionFactor).toFixed(3)} unidades base
                                             </div>
                                         )}
 

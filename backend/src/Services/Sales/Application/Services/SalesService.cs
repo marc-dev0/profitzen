@@ -18,8 +18,17 @@ public class SalesService : ISalesService
     private readonly IConfigurationClient _configurationClient;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly Profitzen.Sales.Application.Clients.PaymentMethodsClient _paymentMethodsClient;
 
-    public SalesService(SalesDbContext context, ILogger<SalesService> logger, IInventoryClient inventoryClient, ICustomerClient customerClient, IConfigurationClient configurationClient, IHttpContextAccessor httpContextAccessor, IHttpClientFactory httpClientFactory)
+    public SalesService(
+        SalesDbContext context, 
+        ILogger<SalesService> logger, 
+        IInventoryClient inventoryClient, 
+        ICustomerClient customerClient, 
+        IConfigurationClient configurationClient, 
+        IHttpContextAccessor httpContextAccessor, 
+        IHttpClientFactory httpClientFactory,
+        Profitzen.Sales.Application.Clients.PaymentMethodsClient paymentMethodsClient)
     {
         _context = context;
         _logger = logger;
@@ -28,6 +37,7 @@ public class SalesService : ISalesService
         _configurationClient = configurationClient;
         _httpContextAccessor = httpContextAccessor;
         _httpClientFactory = httpClientFactory;
+        _paymentMethodsClient = paymentMethodsClient;
     }
 
     public async Task<IEnumerable<SaleDto>> GetSalesAsync(string tenantId, Guid? storeId = null, DateTime? fromDate = null, DateTime? toDate = null)
@@ -269,7 +279,7 @@ public class SalesService : ISalesService
         }
     }
 
-    public async Task<SaleDto> CompleteSaleAsync(Guid saleId)
+    public async Task<SaleDto> CompleteSaleAsync(Guid saleId, CompleteSaleRequest request)
     {
         var sale = await _context.Sales
             .Include(s => s.Items)
@@ -280,12 +290,8 @@ public class SalesService : ISalesService
         if (sale == null)
             throw new InvalidOperationException("Sale not found");
 
-
-        if (sale.Status == SaleStatus.Completed)
-        {
-            _logger.LogInformation("Sale {SaleId} is already completed. Returning current data.", saleId);
-            return await GetSaleByIdAsync(saleId) ?? throw new InvalidOperationException("Failed to retrieve sale");
-        }
+        if (sale.Status != SaleStatus.Pending)
+            throw new InvalidOperationException("Sale is already completed or cancelled");
 
         var creditPayment = sale.Payments.FirstOrDefault(p => p.Method == PaymentMethod.Credit);
         if (creditPayment != null)
@@ -353,7 +359,61 @@ public class SalesService : ISalesService
             throw new InvalidOperationException("Error generando número de comprobante. Por favor intente nuevamente.", ex);
         }
 
-        sale.Complete(documentSeries, documentNumber);
+        // ===  NEW: Use cached calculation from Medios if available ===
+        if (!string.IsNullOrEmpty(request.CacheKey))
+        {
+            _logger.LogInformation("Retrieving cached calculation from Medios: {CacheKey}", request.CacheKey);
+            var cachedCalc = await _paymentMethodsClient.GetCachedCalculationAsync(request.CacheKey);
+            
+            if (cachedCalc != null)
+            {
+                _logger.LogInformation("Using cached calculation - Subtotal: {Subtotal}, Tax: {Tax}, Total: {Total}, Rounding: {Rounding}, Change: {Change}",
+                    cachedCalc.Subtotal, cachedCalc.TaxAmount, cachedCalc.Total, cachedCalc.RoundingAdjustment, cachedCalc.ChangeAmount);
+                
+                // Update sale items with the EXACT subtotals calculated by Medios
+                foreach (var cachedItem in cachedCalc.Items)
+                {
+                    var saleItem = sale.Items.FirstOrDefault(i => i.ProductId == cachedItem.ProductId);
+                    if (saleItem != null)
+                    {
+                        // Use reflection to update the private Subtotal property
+                        var subtotalProperty = saleItem.GetType().GetProperty("Subtotal");
+                        subtotalProperty?.SetValue(saleItem, cachedItem.Subtotal);
+                    }
+                }
+                
+                // Force recalculation of totals to use the cached item subtotals
+                var recalcMethod = sale.GetType().GetMethod("RecalculateTotal", 
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                recalcMethod?.Invoke(sale, null);
+                
+                // Complete with the exact values from cache
+                sale.Complete(cachedCalc.AmountReceived, documentSeries, documentNumber, cachedCalc.RoundingAdjustment);
+            }
+            else
+            {
+                _logger.LogWarning("Cached calculation not found: {CacheKey}, falling back to request values", request.CacheKey);
+                sale.Complete(request.AmountReceived, documentSeries, documentNumber, request.RoundingAdjustment);
+            }
+        }
+        else
+        {
+            // Backward compatibility: use values from request
+            _logger.LogInformation("No cacheKey provided, using request values");
+            sale.Complete(request.AmountReceived, documentSeries, documentNumber, request.RoundingAdjustment);
+        }
+        
+        // DEBUG: Log the sale values before saving
+        _logger.LogInformation("=== COMPLETING SALE {SaleId} ===", saleId);
+        _logger.LogInformation("Subtotal: {Subtotal}, TaxAmount: {TaxAmount}, Total: {Total}", 
+            sale.Subtotal, sale.TaxAmount, sale.Total);
+        _logger.LogInformation("RoundingAdjustment: {RoundingAdjustment}, AmountReceived: {AmountReceived}, ChangeAmount: {ChangeAmount}", 
+            sale.RoundingAdjustment, sale.AmountReceived, sale.ChangeAmount);
+        foreach (var item in sale.Items)
+        {
+            _logger.LogInformation("Item: {ProductName}, Qty: {Quantity}, Price: {UnitPrice}, Subtotal: {Subtotal}", 
+                item.ProductName, item.Quantity, item.UnitPrice, item.Subtotal);
+        }
         
         try 
         {
@@ -373,8 +433,7 @@ public class SalesService : ISalesService
 
         foreach (var item in sale.Items)
         {
-
-            var quantityInBaseUnits = (int)Math.Ceiling(item.Quantity * item.ConversionToBase);
+            var quantityInBaseUnits = item.Quantity * item.ConversionToBase;
 
             _logger.LogInformation("Reducing stock for ProductId: {ProductId}, SaleQuantity: {SaleQuantity}, ConversionToBase: {Conversion}, BaseUnits: {BaseUnits}, StoreId: {StoreId}",
                 item.ProductId, item.Quantity, item.ConversionToBase, quantityInBaseUnits, sale.StoreId);
@@ -388,7 +447,7 @@ public class SalesService : ISalesService
                 uomId: item.UOMId,
                 uomCode: item.UOMCode,
                 originalQuantity: item.Quantity,
-                conversionFactor: (int)item.ConversionToBase);
+                conversionFactor: item.ConversionToBase);
 
             if (!success)
             {
@@ -420,7 +479,7 @@ public class SalesService : ISalesService
         foreach (var item in sale.Items)
         {
 
-            var quantityInBaseUnits = (int)Math.Ceiling(item.Quantity * item.ConversionToBase);
+            var quantityInBaseUnits = item.Quantity * item.ConversionToBase;
 
             _logger.LogInformation("Increasing stock for ProductId: {ProductId}, SaleQuantity: {SaleQuantity}, ConversionToBase: {Conversion}, BaseUnits: {BaseUnits}, StoreId: {StoreId}",
                 item.ProductId, item.Quantity, item.ConversionToBase, quantityInBaseUnits, sale.StoreId);
@@ -434,7 +493,7 @@ public class SalesService : ISalesService
                 uomId: item.UOMId,
                 uomCode: item.UOMCode,
                 originalQuantity: item.Quantity,
-                conversionFactor: (int)item.ConversionToBase);
+                conversionFactor: item.ConversionToBase);
 
             if (!success)
             {
@@ -942,7 +1001,9 @@ public class SalesService : ISalesService
                 i.Quantity,
                 i.UnitPrice,
                 i.DiscountAmount,
-                i.Subtotal
+                i.Subtotal,
+                i.UOMCode,
+                i.ConversionToBase
             )).ToList(),
             sale.Payments.Select(p => new PaymentDto(
                 p.Id,
@@ -951,6 +1012,9 @@ public class SalesService : ISalesService
                 p.Reference,
                 p.PaymentDate
             )).ToList(),
+            sale.AmountReceived,
+            sale.ChangeAmount,
+            sale.RoundingAdjustment,
             sale.DocumentType,
             sale.DocumentSeries,
             sale.DocumentNumber
@@ -1004,6 +1068,13 @@ public class SalesService : ISalesService
 
                 page.Content().Column(col =>
                 {
+                    // DEBUG: Log what we're reading from the database for the ticket
+                    _logger.LogInformation("=== GENERATING TICKET FOR SALE {SaleId} ===", sale.Id);
+                    _logger.LogInformation("Reading from DB - Subtotal: {Subtotal}, TaxAmount: {TaxAmount}, Total: {Total}", 
+                        sale.Subtotal, sale.TaxAmount, sale.Total);
+                    _logger.LogInformation("Reading from DB - RoundingAdjustment: {RoundingAdjustment}, AmountReceived: {AmountReceived}, ChangeAmount: {ChangeAmount}", 
+                        sale.RoundingAdjustment, sale.AmountReceived, sale.ChangeAmount);
+                    
                     // --- LOGO ---
                     if (logoBytes != null)
                     {
@@ -1066,8 +1137,29 @@ public class SalesService : ISalesService
                         // Items
                         foreach (var item in sale.Items)
                         {
-                            table.Cell().Text(item.ProductName);
-                            table.Cell().AlignRight().Text($"{item.Quantity}");
+                            var quantityDisplay = $"{item.Quantity}";
+                            var isKg = item.UOMCode?.ToUpper() == "KG" || item.UOMCode?.ToUpper() == "KILOGRAMO";
+                            
+                            if (isKg && item.Quantity < 1)
+                            {
+                                // Show as grams if less than 1kg
+                                quantityDisplay = $"{(item.Quantity * 1000):N0} GR";
+                            }
+                            else if (item.Quantity % 1 != 0)
+                            {
+                                // Show with 3 decimals if fractional
+                                quantityDisplay = $"{item.Quantity:N3}";
+                            }
+
+                            var name = item.ProductName ?? "";
+                            // Remove any existing (UOM) from name to avoid duplicates like "Prod (Unit) (Unit)"
+                            if (name.Contains('(')) {
+                                name = name.Split('(')[0].Trim();
+                            }
+                            var productNameDisplay = $"{name} ({item.UOMCode})";
+
+                            table.Cell().Text(productNameDisplay);
+                            table.Cell().AlignRight().Text(quantityDisplay);
                             table.Cell().AlignRight().Text($"{item.UnitPrice:N2}");
                             table.Cell().AlignRight().Text($"{item.Subtotal:N2}");
                         }
@@ -1075,7 +1167,6 @@ public class SalesService : ISalesService
 
                     col.Item().PaddingVertical(5).LineHorizontal(1).LineColor(Colors.Black);
 
-                    // --- TOTALS ---
                     col.Item().AlignRight().Text(text =>
                     {
                         text.Span("Subtotal: ").Bold();
@@ -1084,19 +1175,35 @@ public class SalesService : ISalesService
                     
                     col.Item().AlignRight().Text(text =>
                     {
-                        text.Span("IGV: ").Bold();
+                        text.Span("IGV (18%): ").Bold();
                         text.Span($"S/ {sale.TaxAmount:N2}");
                     });
 
                     col.Item().PaddingTop(5).AlignRight().Text(text =>
                     {
                         text.Span("TOTAL: ").Style(titleStyle);
-                        text.Span($"S/ {sale.Total:N2}").Style(titleStyle);
+                        text.Span($"S/ {(sale.Total + sale.RoundingAdjustment):N2}").Style(titleStyle);
                     });
 
-                    // --- FOOTER ---
+                    col.Item().PaddingTop(5).LineHorizontal(0.5f).LineColor(Colors.Grey.Lighten2);
+
+                    // --- PAYMENT DETAILS ---
+                    if (sale.AmountReceived > 0)
+                    {
+                        col.Item().PaddingTop(3).AlignRight().Text(text =>
+                        {
+                            text.Span("Efectivo: ").FontSize(10).Bold();
+                            text.Span($"S/ {sale.AmountReceived:N2}").FontSize(10);
+                        });
+
+                        col.Item().AlignRight().Text(text =>
+                        {
+                            text.Span("Vuelto: ").FontSize(11).Bold();
+                            text.Span($"S/ {sale.ChangeAmount:N2}").FontSize(11).Bold();
+                        });
+                    }
+
                     var footerText = settings.FooterText ?? "Gracias por su compra";
-                    // Fix literal newlines if they come escaped from JSON
                     footerText = footerText.Replace("\\n", "\n");
 
                     col.Item().PaddingTop(10).AlignCenter().Text(footerText);

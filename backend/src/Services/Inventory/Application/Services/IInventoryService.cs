@@ -13,7 +13,7 @@ public interface IInventoryService
     Task<StoreInventoryDto> UpdateStockAsync(Guid storeInventoryId, UpdateStockRequest request, string tenantId, Guid userId, string? token = null);
     Task<StoreInventoryDto> AddStockAsync(Guid storeInventoryId, StockMovementRequest request, string tenantId, Guid userId, string? token = null);
     Task<StoreInventoryDto> RemoveStockAsync(Guid storeInventoryId, StockMovementRequest request, string tenantId, Guid userId, string? token = null);
-    Task<StoreInventoryDto> UpdateMinimumStockAsync(Guid storeInventoryId, int minimumStock, string? token = null);
+    Task<StoreInventoryDto> UpdateMinimumStockAsync(Guid storeInventoryId, decimal minimumStock, string? token = null);
 
     Task<IEnumerable<SupplierDto>> GetSuppliersAsync(string tenantId);
     Task<SupplierDto?> GetSupplierByIdAsync(Guid id);

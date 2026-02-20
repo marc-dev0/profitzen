@@ -16,6 +16,7 @@ public class SalesDbContext : DbContext
     public DbSet<Expense> Expenses { get; set; }
     public DbSet<CashShift> CashShifts { get; set; }
     public DbSet<CashMovement> CashMovements { get; set; }
+    public DbSet<HardwareDiagnostic> HardwareDiagnostics { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -30,6 +31,9 @@ public class SalesDbContext : DbContext
             entity.Property(e => e.DiscountAmount).HasPrecision(18, 2);
             entity.Property(e => e.TaxAmount).HasPrecision(18, 2);
             entity.Property(e => e.Total).HasPrecision(18, 2);
+            entity.Property(e => e.AmountReceived).HasPrecision(18, 2);
+            entity.Property(e => e.ChangeAmount).HasPrecision(18, 2);
+            entity.Property(e => e.RoundingAdjustment).HasPrecision(18, 2);
             entity.Property(e => e.Notes).HasMaxLength(500);
 
             entity.HasIndex(e => e.SaleNumber).IsUnique();
@@ -59,6 +63,7 @@ public class SalesDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.ProductName).HasMaxLength(200).IsRequired();
             entity.Property(e => e.ProductCode).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.Quantity).HasPrecision(18, 6);
             entity.Property(e => e.UnitPrice).HasPrecision(18, 2);
             entity.Property(e => e.DiscountAmount).HasPrecision(18, 2);
             entity.Property(e => e.Subtotal).HasPrecision(18, 2);
@@ -142,9 +147,17 @@ public class SalesDbContext : DbContext
         modelBuilder.Entity<CashMovement>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.Amount).HasPrecision(18, 2);
             entity.Property(e => e.Description).HasMaxLength(200).IsRequired();
             entity.Property(e => e.Type).HasMaxLength(10).IsRequired(); // IN, OUT
+        });
+
+        // HardwareDiagnostic Configuration
+        modelBuilder.Entity<HardwareDiagnostic>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.DeviceName).HasMaxLength(50).IsRequired();
+            entity.HasIndex(e => e.StoreId);
+            entity.HasIndex(e => e.CreatedAt);
         });
 
         base.OnModelCreating(modelBuilder);

@@ -49,11 +49,17 @@ public class DataEnrichmentService : IDataEnrichmentService
             product.CategoryName = categoryName;
         }
 
+        _logger.LogDebug("Enriching BaseUOM for product: {Name}, BaseUOMId: {UOMId}", product.Name, product.BaseUOMId);
         var baseUOM = await _masterDataCache.GetUOMAsync(product.BaseUOMId, tenantId);
         if (baseUOM != null)
         {
             product.BaseUOMCode = baseUOM.Value.Code;
             product.BaseUOMName = baseUOM.Value.Name;
+            _logger.LogDebug("Found BaseUOM: {Code} for product: {Name}", product.BaseUOMCode, product.Name);
+        }
+        else
+        {
+            _logger.LogWarning("BaseUOMId {UOMId} NOT FOUND for product {Name}", product.BaseUOMId, product.Name);
         }
 
         if (product.PurchaseUOMId.HasValue)

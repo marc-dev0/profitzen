@@ -13,6 +13,7 @@ export interface StoreInventoryItem {
   barcode?: string;
   shortScanCode?: string;
   unitCost?: number;
+  baseUOMCode?: string;
 }
 
 export interface AddStockRequest {

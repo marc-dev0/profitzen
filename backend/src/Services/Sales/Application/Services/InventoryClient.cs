@@ -20,8 +20,8 @@ public class InventoryClient : IInventoryClient
         _logger = logger;
     }
 
-    public async Task<bool> ReduceStockAsync(Guid productId, Guid storeId, int quantity, string reason, string tenantId,
-        Guid? uomId = null, string? uomCode = null, int? originalQuantity = null, int? conversionFactor = null)
+    public async Task<bool> ReduceStockAsync(Guid productId, Guid storeId, decimal quantity, string reason, string tenantId,
+        Guid? uomId = null, string? uomCode = null, decimal? originalQuantity = null, decimal? conversionFactor = null)
     {
         var inventoryServiceUrl = _configuration["Services:Inventory:Url"];
         if (string.IsNullOrEmpty(inventoryServiceUrl))
@@ -91,8 +91,8 @@ public class InventoryClient : IInventoryClient
         }
     }
     
-    public async Task<bool> IncreaseStockAsync(Guid productId, Guid storeId, int quantity, string reason, string tenantId,
-        Guid? uomId = null, string? uomCode = null, int? originalQuantity = null, int? conversionFactor = null)
+    public async Task<bool> IncreaseStockAsync(Guid productId, Guid storeId, decimal quantity, string reason, string tenantId,
+        Guid? uomId = null, string? uomCode = null, decimal? originalQuantity = null, decimal? conversionFactor = null)
     {
         var inventoryServiceUrl = _configuration["Services:Inventory:Url"];
         if (string.IsNullOrEmpty(inventoryServiceUrl))
@@ -212,7 +212,7 @@ public class InventoryClient : IInventoryClient
         }
     }
 
-    private static string GetSeverity(int currentStock, int minimumStock)
+    private static string GetSeverity(decimal currentStock, decimal minimumStock)
     {
         if (currentStock == 0) return "critical";
         if (currentStock <= minimumStock / 2) return "high";
@@ -225,8 +225,8 @@ public class InventoryClient : IInventoryClient
         string ProductCode,
         string ProductName,
         Guid StoreId,
-        int CurrentStock,
-        int MinimumStock,
+        decimal CurrentStock,
+        decimal MinimumStock,
         bool IsLowStock,
         DateTime CreatedAt
     );

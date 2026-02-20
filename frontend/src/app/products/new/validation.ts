@@ -10,6 +10,7 @@ export const productSchema = z.object({
   baseUOMId: z.string().optional(),
   allowFractional: z.boolean(),
   purchaseConversionMethod: z.string().optional(),
+  hasExpiration: z.boolean().default(false).optional(),
   isActive: z.boolean().optional(),
 });
 

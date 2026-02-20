@@ -6,10 +6,10 @@ public record InventoryAdjustmentDto(
     string ProductCode,
     string ProductName,
     string AdjustmentType,
-    int Quantity,
+    decimal Quantity,
     bool IsPositive,
-    int PreviousStock,
-    int NewStock,
+    decimal PreviousStock,
+    decimal NewStock,
     string Reason,
     Guid UserId,
     string UserName,
@@ -20,13 +20,13 @@ public record CreateInventoryAdjustmentRequest
 {
     public Guid StoreInventoryId { get; init; }
     public string AdjustmentType { get; init; } = string.Empty;
-    public int Quantity { get; init; }
+    public decimal Quantity { get; init; }
     public bool IsPositive { get; init; }
     public string Reason { get; init; } = string.Empty;
     public Guid? UOMId { get; init; }
     public string? UOMCode { get; init; }
-    public int? OriginalQuantity { get; init; }
-    public int? ConversionFactor { get; init; }
+    public decimal? OriginalQuantity { get; init; }
+    public decimal? ConversionFactor { get; init; }
 }
 
 public record BatchInventoryAdjustmentRequest
@@ -42,12 +42,12 @@ public record BatchAdjustmentItem
 {
     public Guid? StoreInventoryId { get; init; } // Optional if ProductId provided
     public Guid? ProductId { get; init; } // Optional if StoreInventoryId provided (but needed for new items)
-    public int Quantity { get; init; }
+    public decimal Quantity { get; init; }
 
     public Guid? UOMId { get; init; }
     public string? UOMCode { get; init; }
-    public int? OriginalQuantity { get; init; }
-    public int? ConversionFactor { get; init; }
+    public decimal? OriginalQuantity { get; init; }
+    public decimal? ConversionFactor { get; init; }
 }
 
 public record InventoryMovementDto(
@@ -57,14 +57,14 @@ public record InventoryMovementDto(
     string ProductCode,
     string ProductName,
     string MovementType,
-    int Quantity,
+    decimal Quantity,
     string Reason,
     Guid UserId,
     string? UserName,
     DateTime MovementDate,
     string? UOMCode,
-    int? OriginalQuantity,
-    int? ConversionFactor,
+    decimal? OriginalQuantity,
+    decimal? ConversionFactor,
     string? Barcode = null,
     string? ShortScanCode = null
 );
@@ -74,12 +74,12 @@ public record TransferStockRequest
     public Guid SourceStoreId { get; init; }
     public Guid DestinationStoreId { get; init; }
     public Guid ProductId { get; init; }
-    public int Quantity { get; init; }
+    public decimal Quantity { get; init; }
     public string Reason { get; init; } = string.Empty;
     public Guid? UOMId { get; init; }
     public string? UOMCode { get; init; }
-    public int? OriginalQuantity { get; init; }
-    public int? ConversionFactor { get; init; }
+    public decimal? OriginalQuantity { get; init; }
+    public decimal? ConversionFactor { get; init; }
 }
 
 public record TransferStockBatchRequest
@@ -93,9 +93,9 @@ public record TransferStockBatchRequest
 public record TransferItem
 {
     public Guid ProductId { get; init; }
-    public int Quantity { get; init; }
+    public decimal Quantity { get; init; }
     public Guid? UOMId { get; init; }
     public string? UOMCode { get; init; }
-    public int? OriginalQuantity { get; init; }
-    public int? ConversionFactor { get; init; }
+    public decimal? OriginalQuantity { get; init; }
+    public decimal? ConversionFactor { get; init; }
 }

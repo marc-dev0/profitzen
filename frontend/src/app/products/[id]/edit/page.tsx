@@ -30,6 +30,7 @@ interface UOMOption {
   conversionToBase: number;
   isDefault: boolean;
   price?: number;
+  barcode?: string;
   pricesByList?: PriceByList[];
   order?: number;
 }
@@ -97,12 +98,14 @@ export default function EditProductPage() {
     conversionToBase: string;
     conversionQuantity: string;
     conversionRelativeTo: 'base' | 'previous';
+    barcode: string;
     pricesByList: PriceByList[];
   }>({
     uomId: '',
     conversionToBase: '1',
     conversionQuantity: '1',
     conversionRelativeTo: 'base',
+    barcode: '',
     pricesByList: []
   });
 
@@ -152,6 +155,7 @@ export default function EditProductPage() {
       setValue('categoryId', productData.categoryId);
       setValue('baseUOMId', productData.baseUOMId);
       setValue('allowFractional', productData.allowFractional);
+      setValue('hasExpiration', productData.hasExpiration || false);
       setValue('purchaseConversionMethod', productData.purchaseConversionMethod || 'base');
 
       if (productData.purchaseConversionMethod) {
@@ -182,6 +186,7 @@ export default function EditProductPage() {
           uomId: su.uomId,
           conversionToBase: su.conversionToBase,
           isDefault: su.isDefault,
+          barcode: su.barcode || '',
           pricesByList,
           order: index
         };
@@ -356,6 +361,7 @@ export default function EditProductPage() {
           uomId: su.uomId,
           conversionToBase: su.conversionToBase,
           isDefault: su.isDefault,
+          barcode: su.barcode || undefined,
           pricesByList: su.pricesByList || []
         }))
       };
@@ -560,6 +566,7 @@ export default function EditProductPage() {
     setSaleUOMs([...saleUOMs, {
       uomId: currentSaleUOM.uomId,
       conversionToBase: parseFloat(currentSaleUOM.conversionToBase),
+      barcode: currentSaleUOM.barcode || '',
       isDefault: saleUOMs.length === 0,
       pricesByList: currentSaleUOM.pricesByList.map(p => ({ ...p }))
     }]);
@@ -574,6 +581,7 @@ export default function EditProductPage() {
       conversionToBase: '1',
       conversionQuantity: '1',
       conversionRelativeTo: 'base',
+      barcode: '',
       pricesByList: initialPrices
     });
 
@@ -826,6 +834,21 @@ export default function EditProductPage() {
                     </label>
                     <p className="text-xs text-muted-foreground ml-6 mt-1">
                       Para productos por peso o volumen
+                    </p>
+
+                    <label className="flex items-center space-x-2 mt-4">
+                      <input
+                        type="checkbox"
+                        id="hasExpiration"
+                        {...register('hasExpiration')}
+                        className="w-4 h-4 text-primary border-input rounded focus:ring-primary"
+                      />
+                      <span className="text-sm text-foreground font-medium">
+                        Controlar fechas de vencimiento
+                      </span>
+                    </label>
+                    <p className="text-xs text-muted-foreground ml-6 mt-1">
+                      El sistema solicitará fecha de vencimiento al comprar o recibir stock
                     </p>
                   </div>
                 </div>
@@ -1207,6 +1230,23 @@ export default function EditProductPage() {
                         placeholder="1.0"
                       />
                     </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        Código de Barras Específico
+                      </label>
+                      <input
+                        type="text"
+                        value={currentSaleUOM.barcode}
+                        onChange={(e) => {
+                          setCurrentSaleUOM({ ...currentSaleUOM, barcode: e.target.value });
+                        }}
+                        className="w-full px-4 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-background text-foreground"
+                        placeholder="Escanea el código del pack/caja"
+                      />
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        Opcional: Si el pack tiene su propio código
+                      </p>
+                    </div>
                   </div>
 
                   <div className="mb-4">
@@ -1314,6 +1354,24 @@ export default function EditProductPage() {
                           label: 'Factor',
                           className: 'text-foreground',
                           render: (uom) => uom.conversionToBase
+                        },
+                        {
+                          key: 'uomBarcode',
+                          label: 'Código Barras',
+                          className: 'text-foreground font-mono text-xs',
+                          render: (uom, index) => (
+                            <input
+                              type="text"
+                              value={uom.barcode || ''}
+                              onChange={(e) => {
+                                const newSaleUOMs = [...saleUOMs];
+                                newSaleUOMs[index] = { ...newSaleUOMs[index], barcode: e.target.value };
+                                setSaleUOMs(newSaleUOMs);
+                              }}
+                              className="w-full min-w-[120px] px-2 py-1 border border-input rounded bg-background text-foreground focus:ring-1 focus:ring-primary text-xs"
+                              placeholder="Sin código"
+                            />
+                          )
                         },
                         {
                           key: 'isDefault',
