@@ -70,7 +70,7 @@ export default function Sidebar({
     const pathname = usePathname();
     const { user } = useAuthStore();
     const [expandedItems, setExpandedItems] = useState<string[]>([]);
-    const [expandedGroups, setExpandedGroups] = useState<string[]>(['INICIO', 'VENTAS', 'INVENTARIO', 'FINANZAS Y COMPRAS', 'REPORTES E IA', 'CATALOGOS Y AJUSTES']);
+    const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
 
     const { data: menuModules, isLoading } = useQuery({
@@ -208,12 +208,12 @@ export default function Sidebar({
                         }}
                         title={!isDesktopExpanded ? module.name : undefined}
                         className={`w-full group flex items-center ${isDesktopExpanded ? 'justify-between px-4' : 'justify-center px-0'} py-3 text-sm font-bold rounded-xl transition-all duration-200 ${parentActive && !isExpanded
-                            ? 'bg-blue-600/10 text-blue-400'
+                            ? 'bg-blue-500/15 text-blue-400 ring-1 ring-blue-500/20'
                             : 'text-slate-400 hover:bg-slate-900 hover:text-white'
                             }`}
                     >
                         <div className="flex items-center justify-center">
-                            <Icon className={`${isDesktopExpanded ? 'mr-3' : ''} h-5 w-5 flex-shrink-0 ${parentActive ? 'text-blue-400' : 'text-slate-500 group-hover:text-white'}`} />
+                            <Icon className={`${isDesktopExpanded ? 'mr-3' : ''} h-5 w-5 flex-shrink-0 ${parentActive && !isExpanded ? 'text-blue-400' : 'text-slate-500 group-hover:text-white'}`} />
                             {isDesktopExpanded && <span>{module.name}</span>}
                         </div>
                         {isDesktopExpanded && (
@@ -231,12 +231,12 @@ export default function Sidebar({
                                         key={child.id}
                                         href={child.route || '#'}
                                         className={`group flex items-center px-4 py-2.5 text-xs font-bold rounded-lg transition-all duration-200 ${active
-                                            ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50'
+                                            ? 'bg-blue-500/15 text-blue-400 ring-1 ring-blue-500/20'
                                             : 'text-slate-500 hover:bg-slate-900 hover:text-white'
                                             }`}
                                         onClick={() => onClose()}
                                     >
-                                        {ChildIcon && <ChildIcon className={`mr-2.5 h-3.5 w-3.5 ${active ? 'text-white' : 'text-slate-600 group-hover:text-white'}`} />}
+                                        {ChildIcon && <ChildIcon className={`mr-2.5 h-3.5 w-3.5 ${active ? 'text-blue-400' : 'text-slate-600 group-hover:text-white'}`} />}
                                         {child.name}
                                         {child.code === 'analytics_ia' && (
                                             <Sparkles className="ml-auto h-3 w-3 text-yellow-500 animate-pulse" />
@@ -256,12 +256,12 @@ export default function Sidebar({
                 href={module.route || '#'}
                 title={!isDesktopExpanded ? module.name : undefined}
                 className={`group flex items-center ${isDesktopExpanded ? 'px-4' : 'justify-center px-0'} py-3 text-sm font-bold rounded-xl transition-all duration-200 ${parentActive
-                    ? 'bg-blue-600 text-white shadow-xl shadow-blue-900/40 translate-x-1'
+                    ? 'bg-blue-500/15 text-blue-400 ring-1 ring-blue-500/20 translate-x-1'
                     : 'text-slate-400 hover:bg-slate-900 hover:text-white'
                     }`}
                 onClick={() => onClose()}
             >
-                <Icon className={`${isDesktopExpanded ? 'mr-3' : ''} h-5 w-5 flex-shrink-0 transition-colors ${parentActive ? 'text-white' : 'text-slate-500 group-hover:text-white'}`} />
+                <Icon className={`${isDesktopExpanded ? 'mr-3' : ''} h-5 w-5 flex-shrink-0 transition-colors ${parentActive ? 'text-blue-400' : 'text-slate-500 group-hover:text-white'}`} />
                 {isDesktopExpanded && <span>{module.name}</span>}
             </Link>
         );
