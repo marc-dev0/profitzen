@@ -1,11 +1,11 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Profitzen.Common.Extensions;
+using Sagr.Extensions;
 using Profitzen.Sales.Application.Services;
 using Profitzen.Sales.Domain.Entities;
 using Profitzen.Sales.Infrastructure;
-using Profitzen.Sales.Middleware;
+using Sagr.Hosting.Middleware;
 using QuestPDF.Infrastructure;
 using Serilog;
 using System.Text;

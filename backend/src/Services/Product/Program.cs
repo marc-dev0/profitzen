@@ -1,9 +1,11 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Profitzen.Product.Application.Services;
 using Profitzen.Product.Infrastructure;
-using Profitzen.Common.Extensions;
+using Sagr.Extensions;
+using Sagr.Extensions;
+using Sagr.Extensions;
 using Profitzen.Common.Services;
 using System.Text;
 using Serilog;
@@ -57,6 +59,10 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
+builder.Services.AddObservability<ProductDbContext>(
+    "profitzen-product",
+    builder.Configuration["Observability:OtlpEndpoint"]);
+
 builder.Services.AddScoped<IMasterDataCacheService, MasterDataCacheService>();
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<IDataEnrichmentService, DataEnrichmentService>();
@@ -91,6 +97,8 @@ app.UseServiceAuth();
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.UseObservability();
+
 app.MapControllers();
 
 using (var scope = app.Services.CreateScope())
@@ -117,3 +125,4 @@ finally
 {
     Log.CloseAndFlush();
 }
+

@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Identity;
+﻿using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Profitzen.Identity.Application.DTOs;
@@ -6,7 +6,7 @@ using Profitzen.Identity.Application.Services.Seeding;
 using Profitzen.Identity.Domain.Entities;
 using Profitzen.Identity.Domain.Enums;
 using Profitzen.Identity.Infrastructure;
-using Profitzen.Common.Http;
+using Sagr.Http;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -62,14 +62,14 @@ public class AuthService : IAuthService
             var existingUser = await _userManager.FindByEmailAsync(request.Email);
             if (existingUser != null)
             {
-                throw new InvalidOperationException("El email ya está registrado");
+                throw new InvalidOperationException("El email ya estÃ¡ registrado");
             }
 
             var tenant = Tenant.Create(request.CompanyName);
             await _dbContext.Tenants.AddAsync(tenant);
             await _dbContext.SaveChangesAsync();
 
-            var store = new Store(request.StoreName, "Dirección principal");
+            var store = new Store(request.StoreName, "DirecciÃ³n principal");
             store.GetType().GetProperty("TenantId")!.SetValue(store, tenant.Id);
             await _dbContext.Stores.AddAsync(store);
             await _dbContext.SaveChangesAsync();
@@ -106,7 +106,7 @@ public class AuthService : IAuthService
 
             if (user == null || !user.Stores.Any())
             {
-                throw new InvalidOperationException("Error al cargar información del usuario");
+                throw new InvalidOperationException("Error al cargar informaciÃ³n del usuario");
             }
 
             await InitializeServicesForTenantAsync(tenant.Id);
@@ -180,14 +180,14 @@ public class AuthService : IAuthService
         if (user == null)
         {
             _logger.LogWarning("Login attempt failed for email: {Email}", request.Email);
-            throw new UnauthorizedAccessException("Credenciales inválidas");
+            throw new UnauthorizedAccessException("Credenciales invÃ¡lidas");
         }
 
         var isPasswordValid = await _userManager.CheckPasswordAsync(user, request.Password);
         if (!isPasswordValid)
         {
             _logger.LogWarning("Invalid password attempt for user: {UserId}", user.Id);
-            throw new UnauthorizedAccessException("Credenciales inválidas");
+            throw new UnauthorizedAccessException("Credenciales invÃ¡lidas");
         }
 
         if (!user.Stores.Any())
@@ -212,7 +212,7 @@ public class AuthService : IAuthService
             else
             {
                 _logger.LogError("No stores loaded for user: {UserId} and no stores found for tenant: {TenantId}", user.Id, user.TenantId);
-                throw new InvalidOperationException("Error al cargar información de la tienda. No hay tiendas asociadas a su cuenta.");
+                throw new InvalidOperationException("Error al cargar informaciÃ³n de la tienda. No hay tiendas asociadas a su cuenta.");
             }
         }
 
@@ -368,7 +368,7 @@ public class AuthService : IAuthService
         if (user == null)
         {
             _logger.LogWarning("Password reset requested for non-existent email: {Email}", request.Email);
-            return new ForgotPasswordResponse("Si el correo existe, recibirás un enlace para restablecer tu contraseña.");
+            return new ForgotPasswordResponse("Si el correo existe, recibirÃ¡s un enlace para restablecer tu contraseÃ±a.");
         }
 
         // Invalidate any existing tokens for this user
@@ -413,7 +413,7 @@ public class AuthService : IAuthService
         
         var resetLink = $"{frontendUrl.TrimEnd('/')}/reset-password/{resetToken.Token}";
         
-        var subject = "Restablecimiento de contraseña - Profitzen";
+        var subject = "Restablecimiento de contraseÃ±a - Profitzen";
         var body = $@"
             <div style='font-family: -apple-system, BlinkMacSystemFont, ""Segoe UI"", Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; background-color: #ffffff;'>
                 <div style='text-align: center; margin-bottom: 30px;'>
@@ -422,17 +422,17 @@ public class AuthService : IAuthService
                 
                 <div style='background-color: #f8fafc; padding: 32px; border-radius: 16px; border: 1px solid #e2e8f0;'>
                     <h2 style='color: #0f172a; margin-top: 0; font-size: 20px;'>Hola {user.FirstName},</h2>
-                    <p style='color: #475569; line-height: 1.6; font-size: 16px;'>Recibimos una solicitud para restablecer la contraseña de tu cuenta en Profitzen.</p>
+                    <p style='color: #475569; line-height: 1.6; font-size: 16px;'>Recibimos una solicitud para restablecer la contraseÃ±a de tu cuenta en Profitzen.</p>
                     
                     <div style='text-align: center; margin: 32px 0;'>
-                        <a href='{resetLink}' style='background-color: #2563eb; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 16px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);'>Restablecer mi contraseña</a>
+                        <a href='{resetLink}' style='background-color: #2563eb; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 16px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);'>Restablecer mi contraseÃ±a</a>
                     </div>
                     
-                    <p style='color: #64748b; font-size: 14px; line-height: 1.6;'>Si no solicitaste este cambio, puedes ignorar este mensaje de forma segura. Tu contraseña actual seguirá siendo la misma.</p>
+                    <p style='color: #64748b; font-size: 14px; line-height: 1.6;'>Si no solicitaste este cambio, puedes ignorar este mensaje de forma segura. Tu contraseÃ±a actual seguirÃ¡ siendo la misma.</p>
                 </div>
                 
                 <div style='text-align: center; margin-top: 32px; padding-top: 32px; border-top: 1px solid #e2e8f0;'>
-                    <p style='color: #94a3b8; font-size: 12px; margin: 0;'>Este enlace expirará en 24 horas por razones de seguridad.</p>
+                    <p style='color: #94a3b8; font-size: 12px; margin: 0;'>Este enlace expirarÃ¡ en 24 horas por razones de seguridad.</p>
                     <p style='color: #94a3b8; font-size: 12px; margin: 8px 0 0;'>&copy; {DateTime.Now.Year} Profitzen. Todos los derechos reservados.</p>
                 </div>
             </div>";
@@ -440,7 +440,7 @@ public class AuthService : IAuthService
         await _emailService.SendEmailAsync(user.Email!, subject, body);
         _logger.LogInformation("Password reset link for {Email}: {ResetLink}", user.Email, resetLink);
 
-        return new ForgotPasswordResponse("Si el correo existe, recibirás un enlace para restablecer tu contraseña.");
+        return new ForgotPasswordResponse("Si el correo existe, recibirÃ¡s un enlace para restablecer tu contraseÃ±a.");
     }
 
     public async Task<ResetPasswordResponse> ResetPasswordAsync(ResetPasswordRequest request)
@@ -451,7 +451,7 @@ public class AuthService : IAuthService
 
         if (resetToken == null)
         {
-            throw new InvalidOperationException("Token inválido o ya utilizado");
+            throw new InvalidOperationException("Token invÃ¡lido o ya utilizado");
         }
 
         if (resetToken.ExpiresAt < DateTime.UtcNow)
@@ -472,7 +472,7 @@ public class AuthService : IAuthService
         if (!result.Succeeded)
         {
             var errors = string.Join(", ", result.Errors.Select(e => e.Description));
-            throw new InvalidOperationException($"Error al restablecer contraseña: {errors}");
+            throw new InvalidOperationException($"Error al restablecer contraseÃ±a: {errors}");
         }
 
         // Mark token as used
@@ -481,6 +481,6 @@ public class AuthService : IAuthService
 
         _logger.LogInformation("Password reset successful for user {UserId}", user.Id);
 
-        return new ResetPasswordResponse("Contraseña restablecida exitosamente");
+        return new ResetPasswordResponse("ContraseÃ±a restablecida exitosamente");
     }
 }

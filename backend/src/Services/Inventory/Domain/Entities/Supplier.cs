@@ -1,4 +1,4 @@
-using Profitzen.Common.Domain;
+using Sagr.Domain;
 
 namespace Profitzen.Inventory.Domain.Entities;
 

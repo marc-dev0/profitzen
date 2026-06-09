@@ -1,5 +1,7 @@
-using Profitzen.Common.Domain;
-using Profitzen.Common.Extensions;
+﻿using Sagr.Domain;
+using Sagr.Extensions;
+using Sagr.Extensions;
+using Sagr.Extensions;
 
 namespace Profitzen.Customer.Domain.Entities;
 
@@ -56,3 +58,4 @@ public class Credit : BaseEntity
 
     public bool IsOverdue() => !IsPaid && DueDate.HasValue && DueDate.Value < DateTime.UtcNow;
 }
+

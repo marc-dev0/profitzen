@@ -1,9 +1,11 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Profitzen.Customer.Application.Services;
 using Profitzen.Customer.Infrastructure;
-using Profitzen.Common.Extensions;
+using Sagr.Extensions;
+using Sagr.Extensions;
+using Sagr.Extensions;
 using System.Text;
 using Serilog;
 
@@ -52,6 +54,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
+builder.Services.AddObservability<CustomerDbContext>(
+    "profitzen-customer",
+    builder.Configuration["Observability:OtlpEndpoint"]);
+
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddServiceAuth();
 
@@ -80,6 +86,8 @@ if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Demo"))
 app.UseServiceAuth();
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.UseObservability();
 
 app.MapControllers();
 
@@ -123,7 +131,7 @@ static async Task SeedDataAsync(CustomerDbContext context)
                 Profitzen.Customer.Domain.Enums.DocumentType.DNI,
                 "12345678",
                 "Juan",
-                "Pérez García",
+                "PÃ©rez GarcÃ­a",
                 "juan.perez@email.com",
                 "987654321",
                 "Av. Principal 123, Lima",
@@ -133,8 +141,8 @@ static async Task SeedDataAsync(CustomerDbContext context)
                 tenant1Id,
                 Profitzen.Customer.Domain.Enums.DocumentType.RUC,
                 "20123456789",
-                "María",
-                "López Torres",
+                "MarÃ­a",
+                "LÃ³pez Torres",
                 "maria.lopez@email.com",
                 "987654322",
                 "Jr. Comercio 456, Lima",
@@ -145,7 +153,7 @@ static async Task SeedDataAsync(CustomerDbContext context)
                 Profitzen.Customer.Domain.Enums.DocumentType.DNI,
                 "87654321",
                 "Carlos",
-                "Rodríguez Sánchez",
+                "RodrÃ­guez SÃ¡nchez",
                 null,
                 "987654323",
                 "Calle Los Olivos 789, Lima",
@@ -157,3 +165,4 @@ static async Task SeedDataAsync(CustomerDbContext context)
         await context.SaveChangesAsync();
     }
 }
+

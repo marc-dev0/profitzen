@@ -1,6 +1,6 @@
-using Profitzen.Product.Application.DTOs;
+﻿using Profitzen.Product.Application.DTOs;
 using Profitzen.Common.Services;
-using Profitzen.Common.Http;
+using Sagr.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 using System.Text.Json;
@@ -179,3 +179,4 @@ public class DataEnrichmentService : IDataEnrichmentService
         DateTime CreatedAt
     );
 }
+

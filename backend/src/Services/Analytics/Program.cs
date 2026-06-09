@@ -1,9 +1,11 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Profitzen.Analytics.Application.Services;
 using Profitzen.Analytics.Infrastructure;
-using Profitzen.Common.Extensions;
+using Sagr.Extensions;
+using Sagr.Extensions;
+using Sagr.Extensions;
 using Microsoft.SemanticKernel;
 using System.Text;
 using Serilog;
@@ -51,6 +53,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ClockSkew = TimeSpan.Zero
         };
     });
+
+builder.Services.AddObservability<AnalyticsDbContext>(
+    "profitzen-analytics",
+    builder.Configuration["Observability:OtlpEndpoint"]);
 
 builder.Services.AddHttpClient();
 
@@ -107,6 +113,8 @@ if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Demo"))
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.UseObservability();
+
 app.MapControllers();
 
 using (var scope = app.Services.CreateScope())
@@ -133,3 +141,4 @@ finally
 {
     Log.CloseAndFlush();
 }
+

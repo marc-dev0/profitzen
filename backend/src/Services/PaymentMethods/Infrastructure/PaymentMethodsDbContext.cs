@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Profitzen.Common.Domain;
+using Sagr.Domain;
 
 namespace Profitzen.PaymentMethods.Infrastructure;
 

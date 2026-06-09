@@ -1,4 +1,4 @@
-using Profitzen.Common.Domain;
+using Sagr.Domain;
 
 namespace Profitzen.Common.Domain;
 
@@ -45,7 +45,4 @@ public class PaymentMethodConfig : BaseEntity
     
     /// <summary>Orden de aparición en la UI</summary>
     public int SortOrder { get; set; }
-    
-    /// <summary>Fecha de creación</summary>
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

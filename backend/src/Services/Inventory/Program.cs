@@ -1,10 +1,12 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Profitzen.Inventory.Application.Services;
 using Profitzen.Inventory.Infrastructure;
 using Profitzen.Common.Services;
-using Profitzen.Common.Extensions;
+using Sagr.Extensions;
+using Sagr.Extensions;
+using Sagr.Extensions;
 using System.Text;
 using Serilog;
 
@@ -53,6 +55,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
+builder.Services.AddObservability<InventoryDbContext>(
+    "profitzen-inventory",
+    builder.Configuration["Observability:OtlpEndpoint"]);
+
 builder.Services.AddHttpClient();
 // TODO: Fix DI issue - MasterDataCacheService (Singleton) cannot consume ServiceHttpClient (Scoped)
 // builder.Services.AddSingleton<IMasterDataCacheService, MasterDataCacheService>();
@@ -87,6 +93,8 @@ app.UseServiceAuth();
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.UseObservability();
+
 app.MapControllers();
 
 using (var scope = app.Services.CreateScope())
@@ -113,3 +121,4 @@ finally
 {
     Log.CloseAndFlush();
 }
+

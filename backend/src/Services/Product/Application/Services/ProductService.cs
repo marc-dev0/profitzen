@@ -1,9 +1,9 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Profitzen.Product.Application.DTOs;
 using Profitzen.Product.Infrastructure;
-using Profitzen.Common.Http;
+using Sagr.Http;
 using System.Text.Json;
 
 using Profitzen.Product.Domain.Entities;
@@ -1087,3 +1087,4 @@ public class ProductService : IProductService
         await _context.SaveChangesAsync();
     }
 }
+

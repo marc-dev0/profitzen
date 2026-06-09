@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -7,7 +7,9 @@ using Profitzen.Identity.Application.Services.Seeding;
 using Profitzen.Identity.Domain.Entities;
 using Profitzen.Identity.Domain.Enums;
 using Profitzen.Identity.Infrastructure;
-using Profitzen.Common.Extensions;
+using Sagr.Extensions;
+using Sagr.Extensions;
+using Sagr.Extensions;
 using System.Text;
 using Serilog;
 
@@ -72,6 +74,10 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
+builder.Services.AddObservability<IdentityDbContext>(
+    "profitzen-identity",
+    builder.Configuration["Observability:OtlpEndpoint"]);
+
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IStoreService, StoreService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
@@ -105,6 +111,8 @@ if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Demo"))
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.UseObservability();
 
 app.MapControllers();
 
@@ -176,3 +184,4 @@ finally
 {
     Log.CloseAndFlush();
 }
+

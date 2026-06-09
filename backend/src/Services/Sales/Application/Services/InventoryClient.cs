@@ -1,5 +1,5 @@
-using System.Net.Http.Json;
-using Profitzen.Common.Http;
+﻿using System.Net.Http.Json;
+using Sagr.Http;
 using Profitzen.Sales.Application.DTOs;
 
 namespace Profitzen.Sales.Application.Services;
@@ -231,3 +231,4 @@ public class InventoryClient : IInventoryClient
         DateTime CreatedAt
     );
 }
+

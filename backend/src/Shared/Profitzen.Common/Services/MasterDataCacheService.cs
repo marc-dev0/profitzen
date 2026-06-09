@@ -1,4 +1,4 @@
-using Profitzen.Common.Http;
+using Sagr.Http;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;

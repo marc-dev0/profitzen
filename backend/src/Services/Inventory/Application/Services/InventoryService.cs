@@ -1,9 +1,9 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Profitzen.Inventory.Application.DTOs;
 using Profitzen.Inventory.Domain.Entities;
 using Profitzen.Inventory.Domain.Enums;
 using Profitzen.Inventory.Infrastructure;
-using Profitzen.Common.Http;
+using Sagr.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
 
@@ -1387,7 +1387,7 @@ public class InventoryService : IInventoryService
                 .FirstOrDefaultAsync(si => si.StoreId == request.SourceStoreId && si.ProductId == request.ProductId && si.TenantId == tenantId);
 
             if (sourceInventory == null || sourceInventory.CurrentStock < request.Quantity)
-                throw new InvalidOperationException($"Stock insuficiente en el almacén de origen. Stock actual: {sourceInventory?.CurrentStock ?? 0}");
+                throw new InvalidOperationException($"Stock insuficiente en el almacÃ©n de origen. Stock actual: {sourceInventory?.CurrentStock ?? 0}");
 
             sourceInventory.RemoveStock(request.Quantity);
 
@@ -1449,7 +1449,7 @@ public class InventoryService : IInventoryService
     public async Task<string> TransferStockBatchAsync(TransferStockBatchRequest request, string tenantId, Guid userId)
     {
         if (request.SourceStoreId == Guid.Empty || request.DestinationStoreId == Guid.Empty)
-           throw new InvalidOperationException("ID de almacén de origen o destino no válido.");
+           throw new InvalidOperationException("ID de almacÃ©n de origen o destino no vÃ¡lido.");
 
         if (request.SourceStoreId == request.DestinationStoreId)
             throw new InvalidOperationException("La tienda de origen y destino no pueden ser la misma");
@@ -1477,7 +1477,7 @@ public class InventoryService : IInventoryService
 
                 // For batch, we grab the product name for error message if possible, or just ID
                 if (sourceInventory == null)
-                    throw new InvalidOperationException($"No se encontró inventario en origen para el producto (ID: {item.ProductId}).");
+                    throw new InvalidOperationException($"No se encontrÃ³ inventario en origen para el producto (ID: {item.ProductId}).");
                     
                 if (sourceInventory.CurrentStock < item.Quantity)
                     throw new InvalidOperationException($"Stock insuficiente para producto (ID: {item.ProductId}). Stock actual: {sourceInventory.CurrentStock}, Solicitado: {item.Quantity}");
@@ -1623,8 +1623,8 @@ public class InventoryService : IInventoryService
                 InventoryMovementType.Exit => "Salida",
                 InventoryMovementType.Adjustment => "Ajuste",
                 InventoryMovementType.Transfer => "Transferencia",
-                InventoryMovementType.Return => "Devolución",
-                InventoryMovementType.Loss => "Pérdida/Merma",
+                InventoryMovementType.Return => "DevoluciÃ³n",
+                InventoryMovementType.Loss => "PÃ©rdida/Merma",
                 _ => "Desconocido"
             };
 
@@ -1653,7 +1653,7 @@ public class InventoryService : IInventoryService
     {
         var adjustmentCode = $"ADJ-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString().Substring(0, 8).ToUpper()}";
         
-        var movementType = request.AdjustmentType == "MERMA" || request.AdjustmentType == "VENCIDO" || request.AdjustmentType == "DAÑADO"
+        var movementType = request.AdjustmentType == "MERMA" || request.AdjustmentType == "VENCIDO" || request.AdjustmentType == "DAÃ‘ADO"
             ? InventoryMovementType.Loss
             : InventoryMovementType.Adjustment;
             
@@ -1807,7 +1807,7 @@ public class InventoryService : IInventoryService
             transfer.OriginStoreId, "Cargando...", // Frontend handles lookup
             transfer.DestinationStoreId, "Cargando...", 
             transfer.Status,
-            transfer.Status == TransferStatus.InTransit ? "En Tránsito" : 
+            transfer.Status == TransferStatus.InTransit ? "En TrÃ¡nsito" : 
             transfer.Status == TransferStatus.Completed ? "Completada" : "Cancelada",
             transfer.RequestedByUserId, "", // Frontend handles user lookup
             transfer.ReceivedByUserId, "",
@@ -1843,8 +1843,8 @@ public class InventoryService : IInventoryService
          // var originStore = await _context.Stores.FindAsync(transfer.OriginStoreId);
          // var destStore = await _context.Stores.FindAsync(transfer.DestinationStoreId);
          
-         string originStoreName = "Almacén Origen";
-         string destStoreName = "Almacén Destino";
+         string originStoreName = "AlmacÃ©n Origen";
+         string destStoreName = "AlmacÃ©n Destino";
          
          // Fetch user names
          // Ideally use Identity service via gRPC or HTTP, but for monolithic/demo we might not have direct DB access to users here if separate contexts
@@ -1881,7 +1881,7 @@ public class InventoryService : IInventoryService
             transfer.OriginStoreId, originStoreName, 
             transfer.DestinationStoreId, destStoreName, 
             transfer.Status,
-            transfer.Status == TransferStatus.InTransit ? "En Tránsito" : 
+            transfer.Status == TransferStatus.InTransit ? "En TrÃ¡nsito" : 
             transfer.Status == TransferStatus.Completed ? "Completada" : "Cancelada",
             transfer.RequestedByUserId, "", 
             transfer.ReceivedByUserId, "",
@@ -1911,7 +1911,7 @@ public class InventoryService : IInventoryService
             t.OriginStoreId, "", 
             t.DestinationStoreId, "", 
             t.Status, 
-            t.Status == TransferStatus.InTransit ? "En Tránsito" : 
+            t.Status == TransferStatus.InTransit ? "En TrÃ¡nsito" : 
             t.Status == TransferStatus.Completed ? "Completada" : "Cancelada",
             t.RequestedByUserId, "",
             t.ReceivedByUserId, "",
@@ -1926,7 +1926,7 @@ public class InventoryService : IInventoryService
         if (transfer == null) throw new KeyNotFoundException("Transferencia no encontrada");
         
         if (transfer.Status != TransferStatus.InTransit) 
-            throw new InvalidOperationException($"La transferencia no está en tránsito (Estado actual: {transfer.Status})");
+            throw new InvalidOperationException($"La transferencia no estÃ¡ en trÃ¡nsito (Estado actual: {transfer.Status})");
         
         transfer.Status = TransferStatus.Completed;
         transfer.ReceivedByUserId = userId;
@@ -1970,7 +1970,7 @@ public class InventoryService : IInventoryService
         if (transfer == null) throw new KeyNotFoundException("Transferencia no encontrada");
 
         if (transfer.Status != TransferStatus.InTransit)
-            throw new InvalidOperationException($"Solo se pueden cancelar transferencias en tránsito (Estado actual: {transfer.Status})");
+            throw new InvalidOperationException($"Solo se pueden cancelar transferencias en trÃ¡nsito (Estado actual: {transfer.Status})");
 
         // Restore stock to origin
         foreach (var detail in transfer.Details)
@@ -1992,7 +1992,7 @@ public class InventoryService : IInventoryService
                 originInventory.Id,
                 detail.Quantity,
                 InventoryMovementType.TransferIn, 
-                $"Cancelación de Transferencia ({transfer.TransferNumber})",
+                $"CancelaciÃ³n de Transferencia ({transfer.TransferNumber})",
                 userId,
                 null, null, null, null
              );
@@ -2009,4 +2009,5 @@ public class InventoryService : IInventoryService
     }
 
 }
+
 

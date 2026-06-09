@@ -174,15 +174,19 @@ public class CashShiftService : ICashShiftService
 
         // 4. Fetch Credit Collections from customer schema
         // Since we are in the same DB for demo purposes, we can join/query across schemas
-        var totalCreditCollections = await _context.Database
-            .SqlQueryRaw<decimal>(
-                @"SELECT COALESCE(SUM(""Amount""), 0) as ""Value"" 
-                  FROM customer.""CreditPayments"" 
-                  WHERE ""StoreId"" = {0} 
-                  AND ""PaymentDate"" >= {1} 
-                  AND ""PaymentDate"" <= {2}",
-                shift.StoreId, shift.StartTime, endTime)
-            .FirstOrDefaultAsync();
+        decimal totalCreditCollections = 0;
+        if (_context.Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory")
+        {
+            totalCreditCollections = await _context.Database
+                .SqlQueryRaw<decimal>(
+                    @"SELECT COALESCE(SUM(""Amount""), 0) as ""Value"" 
+                      FROM customer.""CreditPayments"" 
+                      WHERE ""StoreId"" = {0} 
+                      AND ""PaymentDate"" >= {1} 
+                      AND ""PaymentDate"" <= {2}",
+                    shift.StoreId, shift.StartTime, endTime)
+                .FirstOrDefaultAsync();
+        }
 
         shift.TotalCreditCollections = totalCreditCollections;
 
@@ -191,14 +195,14 @@ public class CashShiftService : ICashShiftService
         // but generally we want to ensure we capture expenses paid DURING the shift.
         // If the expense date is just a date, we include it if it's the same day as shift start.
         var shiftStartDate = shift.StartTime.Date;
-        var shiftEndDate = endTime.Date;
+        var shiftEndDate = endTime.Date.AddDays(1);
 
         var expenseList = await _context.Expenses
             .Where(e => e.StoreId == shift.StoreId 
                      && e.IsPaid
                      && e.PaymentMethod == PaymentMethod.Cash
                      && e.Date >= shiftStartDate
-                     && e.Date <= shiftEndDate)
+                     && e.Date < shiftEndDate)
             .AsNoTracking()
             .ToListAsync();
 

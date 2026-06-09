@@ -1,6 +1,8 @@
-using Profitzen.Common.Domain;
+﻿using Sagr.Domain;
 using Profitzen.Inventory.Domain.Enums;
-using Profitzen.Common.Extensions;
+using Sagr.Extensions;
+using Sagr.Extensions;
+using Sagr.Extensions;
 
 namespace Profitzen.Inventory.Domain.Entities;
 
@@ -43,3 +45,4 @@ public class InventoryAdjustment : BaseEntity
         AdjustmentDate = DateTime.UtcNow.ToBusinessDate();
     }
 }
+

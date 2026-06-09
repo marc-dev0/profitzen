@@ -1,11 +1,13 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
-using Profitzen.Common.Domain;
+using Sagr.Domain;
 using Profitzen.PaymentMethods.Infrastructure;
 using Profitzen.PaymentMethods.Application.Services;
-using Profitzen.Common.Extensions;
+using Sagr.Extensions;
+using Sagr.Extensions;
+using Sagr.Extensions;
 using Serilog;
 
 Log.Logger = new LoggerConfiguration()
@@ -53,6 +55,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
+builder.Services.AddObservability<PaymentMethodsDbContext>(
+    "profitzen-paymentmethods",
+    builder.Configuration["Observability:OtlpEndpoint"]);
+
 builder.Services.AddAuthorization();
 builder.Services.AddServiceAuth();
 builder.Services.AddScoped<IPaymentMethodSeeder, PaymentMethodSeeder>();
@@ -88,6 +94,8 @@ app.UseServiceAuth();
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.UseObservability();
+
 app.MapControllers();
 
 using (var scope = app.Services.CreateScope())
@@ -114,3 +122,4 @@ finally
 {
     Log.CloseAndFlush();
 }
+

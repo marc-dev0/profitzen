@@ -75,10 +75,55 @@ services:
     volumes:
       - seq_data:/data
 
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: profitzen-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=7d'
+    networks:
+      - profitzen-network
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: profitzen-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - profitzen-network
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.59
+    container_name: profitzen-jaeger
+    ports:
+      - "16686:16686"
+      - "4318:4318"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - profitzen-network
+
 volumes:
   postgres_dev_data:
   ollama_local_data:
   seq_data:
+  prometheus_data:
+  grafana_data:
 
 
 networks:

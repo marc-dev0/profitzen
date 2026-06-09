@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Sagr.Domain;
 using Profitzen.Common.Domain;
 using Profitzen.PaymentMethods.Infrastructure;
 

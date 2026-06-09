@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  nexus:
+    image: sonatype/nexus3:latest
+    container_name: profitzen-nexus
+    restart: unless-stopped
+    ports:
+      - "8081:8081" # Puerto de la interfaz web y registro
+    volumes:
+      - nexus-data:/nexus-data # Volumen persistente para no perder los paquetes
+    networks:
+      - default # Usamos la red default para simplificar. 
+      # Si necesitas que los microservicios en Docker se comuniquen directamente usando el nombre 'nexus', 
+      # descomenta las siguientes líneas y usa la red externa.
+      # - profitzen-network
+
+volumes:
+  nexus-data:
+
+networks:
+  default:
+    name: nexus-network
+  # profitzen-network:
+  #   external: true
+  #   name: profitzen_profitzen-network

@@ -1,4 +1,4 @@
-using Profitzen.Common.Domain;
+using Sagr.Domain;
 using Profitzen.Customer.Domain.Enums;
 
 namespace Profitzen.Customer.Domain.Entities;

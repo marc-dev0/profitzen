@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Ocelot.DependencyInjection;
 using Ocelot.Middleware;
+using Prometheus;
 using System.Text;
 using Serilog;
 
@@ -53,6 +54,7 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddOcelot();
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
@@ -63,27 +65,9 @@ if (app.Environment.IsDevelopment() || app.Environment.EnvironmentName == "Demo"
 
 app.UseAuthentication();
 
-// Health check endpoint (bypasses Ocelot for monitoring)
-if (app.Environment.IsDevelopment())
-{
-    app.Use(async (context, next) =>
-    {
-        if (context.Request.Path == "/health" && context.Request.Method == "GET")
-        {
-            context.Response.ContentType = "application/json";
-            await context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(new
-            {
-                service = "API Gateway",
-                status = "healthy",
-                timestamp = DateTime.UtcNow,
-                version = "1.0.0",
-                environment = "Development"
-            }));
-            return;
-        }
-        await next();
-    });
-}
+app.UseHttpMetrics();
+app.MapMetrics("/metrics");
+app.MapHealthChecks("/health");
 
 await app.UseOcelot();
 
