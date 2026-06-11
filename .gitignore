@@ -29,6 +29,8 @@ yarn-debug.log*
 .claude/
 *.md
 !README.md
+!docs/ROADMAP_IMPLEMENTACION.md
+!docs/daily-progress/*.md
 # We explicitly ignore all other MD files as requested
 *.MIGRATION.md
 INSTRUCCIONES_*.md
@@ -43,6 +45,7 @@ PASOS_*.md
 
 # --- Temporary & Generated ---
 *.txt
+!backend-python/requirements.txt
 TestResults/
 *.trx
 __pycache__/

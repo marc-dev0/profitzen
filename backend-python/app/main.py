@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .api.endpoints import router as api_router
+from .api.daily_summary_router import router as daily_summary_router
 
 app = FastAPI(
     title="Profitzen Analytics API",
@@ -27,3 +28,4 @@ async def health_check():
 
 # Incluir rutas del API
 app.include_router(api_router, prefix="/api/v1")
+app.include_router(daily_summary_router, prefix="/api/v1")
